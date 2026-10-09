@@ -22,6 +22,7 @@
       <a href="index.html#tls">TLS 1.3 + mTLS</a>
       <a href="index.html#how">How it works</a>
       <a href="index.html#ca">Certificate authority</a>
+      <a href="index.html#console">Console</a>
       <a href="manual.html" aria-current="page">Guide</a>
     </nav>
     <button class="menu" type="button" aria-expanded="false" aria-controls="nav"><span></span>Menu</button>
@@ -143,7 +144,28 @@ pqc ca revoke SERIAL --reason keyCompromise</pre>
     </div>
   </section>
 
-  <section id="choose" class="alt">
+  <section id="console" class="alt">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">Prefer clicking</p>
+        <h2>The console</h2>
+        <p>The same steps in a browser page, on your own machine.</p>
+      </div>
+      <pre>pqc console --edge http://127.0.0.1:9100</pre>
+      <p class="fine"><b>You should see</b> <code>console on http://localhost:8900/</code> and your browser opening it. If it asks for a token, paste the one the command printed. <code>--edge</code> is the <code>--metrics</code> address of an edge; leave it out if you have none yet. The CA's folder is <code>pki</code> unless you give <code>--ca</code>.</p>
+      <table class="plain">
+        <tr><th>Page</th><th>What you do there</th></tr>
+        <tr><td>Overview</td><td>CA and revocation list health, certificates that need renewal, edges up or down, and the share of quantum-safe handshakes.</td></tr>
+        <tr><td>Certificates</td><td>Issue server, client or site certificates; download them as a zip (the private key only if you tick it); renew; revoke with a reason.</td></tr>
+        <tr><td>Edges</td><td>Live connections, handshakes and key-exchange groups for each edge, every 5 seconds.</td></tr>
+        <tr><td>Test a connection</td><td>Enter host:port, optionally pick a client certificate. You see the key exchange, the certificate and whether mutual TLS let you in; if not, why, and what the server offers instead.</td></tr>
+        <tr><td>Client setup</td><td>Ready-to-copy settings for the pqc command, curl, Python, nginx, and any other app (Java included) through a local edge.</td></tr>
+      </table>
+      <p class="fine">Every action is written to <code>console-audit.jsonl</code>. To reach the console from another machine, put <code>pqc tls edge --policy transition</code> in front of it rather than listening beyond localhost.</p>
+    </div>
+  </section>
+
+  <section id="choose">
     <div class="wrap">
       <div class="intro">
         <p class="kicker">Choices</p>
@@ -159,7 +181,7 @@ pqc ca revoke SERIAL --reason keyCompromise</pre>
     </div>
   </section>
 
-  <section id="run">
+  <section id="run" class="alt">
     <div class="wrap">
       <div class="intro">
         <p class="kicker">Keep it running</p>
@@ -174,7 +196,7 @@ pqc ca revoke SERIAL --reason keyCompromise</pre>
     </div>
   </section>
 
-  <section id="trouble" class="alt">
+  <section id="trouble">
     <div class="wrap">
       <div class="intro">
         <p class="kicker">If something goes wrong</p>

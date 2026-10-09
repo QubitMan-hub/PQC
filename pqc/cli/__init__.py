@@ -7,7 +7,7 @@ import sys
 
 from .. import NAME, __version__, explain, tls
 from ..pki import CAError
-from . import certificates, edge, start
+from . import certificates, console, edge, start
 
 
 class JSONFormatter(logging.Formatter):
@@ -66,6 +66,7 @@ def parser():
     start.add(sub)
     edge.add(sub)
     certificates.add(sub, common)
+    console.add(sub)
     explain_options(ap)
     return ap
 

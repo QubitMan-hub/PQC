@@ -13,7 +13,7 @@ pqc doctor && pqc try
 
 ## Layout
 
-`pqc/pki` (CA, EST, ACME, signers), `pqc/tls` (OpenSSL binding, server, edge, bundles), `pqc/cli` (commands), `pqc/checks.py` (doctor), `pqc/storage.py` (atomic, locked files).
+`pqc/pki` (CA, EST, ACME, signers), `pqc/tls` (OpenSSL binding, server, edge, bundles), `pqc/cli` (commands), `pqc/console` (the local web page: one HTML file, one JSON API), `pqc/checks.py` (doctor), `pqc/storage.py` (atomic, locked files).
 
 ## Rules
 

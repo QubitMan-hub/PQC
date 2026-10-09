@@ -41,6 +41,14 @@ pqc tls connect localhost:8443 --ca pki/ca.crt             # 4. check: shows X25
 
 Your app now answers on port 8443, quantum-safe. To let in only clients with a certificate, and to cut one off, follow the guide.
 
+## Prefer clicking?
+
+```
+pqc console
+```
+
+Opens a page in your browser where you issue, download, renew and revoke certificates, watch your edges, and test any address to see whether it really connects quantum-safe, or why it was refused. It runs on your machine only and asks for the token it prints. Add `--edge http://127.0.0.1:9100` for an edge started with `--metrics 127.0.0.1:9100`.
+
 ## Learn more
 
 - **Step-by-step guide:** [site/manual.html](site/manual.html) (open it in a browser). Every step shows what you should see.

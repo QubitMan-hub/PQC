@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PQC console</title>
+<style>
+:root { --bg: #f6f5f1; --paper: #fff; --ink: #2e3c4e; --body: #3f4c59; --muted: #6a7480; --rule: #e4dfd3; --soft: #f1eee6;
+  --amber: #ffbf00; --amber-deep: #8a6100; --amber-wash: #fff6dc; --ok: #1f7a4d; --ok-wash: #e6f4ec; --bad: #b3261e; --bad-wash: #fbe9e7;
+  --warn: #8a6100; --side: #2e3c4e; --side-ink: #d9dee5; --code: #1f2a37; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root { --bg: #151b23; --paper: #1d2530; --ink: #eef1f5; --body: #c9d0d8; --muted: #8e99a6; --rule: #2e3846;
+  --soft: #232c38; --amber-deep: #ffcf4d; --amber-wash: #3a3016; --ok: #5cc98f; --ok-wash: #173326; --bad: #ff8a80; --bad-wash: #3d1c1a;
+  --warn: #ffcf4d; --side: #10151c; --code: #0f141a; color-scheme: dark; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--body); font: 15px/1.55 "Segoe UI", Roboto, system-ui, -apple-system, sans-serif; }
+h1, h2, h3 { color: var(--ink); font-weight: 600; margin: 0; text-wrap: balance; }
+h1 { font-size: 24px; } h2 { font-size: 17px; } h3 { font-size: 15px; }
+button, input, select { font: inherit; color: inherit; }
+code, pre, .mono { font-family: "Cascadia Mono", "Roboto Mono", ui-monospace, Consolas, monospace; font-size: 13px; }
+.app { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100%; }
+aside { background: var(--side); color: var(--side-ink); padding: 22px 14px; display: flex; flex-direction: column; gap: 18px; position: sticky; top: 0; height: 100vh; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
+.brand b { color: #fff; font-size: 16px; letter-spacing: .02em; }
+.brand small { display: block; color: #9aa6b4; font-size: 12px; }
+.mark { width: 30px; height: 30px; border-radius: 8px; background: var(--amber); display: grid; place-items: center; color: #2e3c4e; font-weight: 800; }
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav button { all: unset; cursor: pointer; padding: 9px 12px; border-radius: 8px; display: flex; gap: 10px; align-items: center; color: var(--side-ink); }
+nav button:hover { background: rgba(255,255,255,.06); }
+nav button[aria-current="page"] { background: rgba(255,191,0,.14); color: #fff; box-shadow: inset 3px 0 0 var(--amber); }
+nav button:focus-visible { outline: 2px solid var(--amber); }
+nav svg { width: 18px; height: 18px; flex: none; }
+.side-foot { margin-top: auto; font-size: 12px; color: #9aa6b4; padding: 0 8px; display: grid; gap: 6px; }
+.side-foot button { all: unset; cursor: pointer; color: #c9d0d8; text-decoration: underline; }
+main { padding: 26px 32px 60px; max-width: 1180px; width: 100%; min-width: 0; }
+.top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin-bottom: 20px; }
+.top p { margin: 4px 0 0; color: var(--muted); }
+.kicker { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--amber-deep); margin: 0 0 4px; }
+.card { background: var(--paper); border: 1px solid var(--rule); border-radius: 12px; padding: 18px 20px; }
+.grid { display: grid; gap: 14px; }
+.tiles { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+.two { grid-template-columns: 1.2fr 1fr; align-items: start; }
+.tile h3 { font-size: 13px; color: var(--muted); font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+.big { font-size: 30px; font-weight: 650; color: var(--ink); line-height: 1.15; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
+.sub { color: var(--muted); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.ok { color: var(--ok); background: var(--ok-wash); } .bad { color: var(--bad); background: var(--bad-wash); }
+.warn { color: var(--warn); background: var(--amber-wash); } .neutral { color: var(--muted); background: var(--soft); }
+.btn { border: 1px solid var(--rule); background: var(--paper); color: var(--ink); padding: 7px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; font-size: 14px; }
+.btn:hover { border-color: var(--amber); }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: #2e3c4e; }
+.btn.danger { color: var(--bad); }
+.btn.small { padding: 4px 10px; font-size: 13px; }
+.btn:disabled { opacity: .55; cursor: wait; }
+.btn:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+form.issue { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; align-items: end; }
+label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--ink); }
+label span { font-weight: 400; color: var(--muted); }
+input, select { border: 1px solid var(--rule); background: var(--paper); border-radius: 8px; padding: 7px 10px; min-width: 0; width: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 8px; overflow: hidden; }
+.seg button { all: unset; cursor: pointer; padding: 7px 12px; font-size: 14px; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.table { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+td { padding: 10px; border-bottom: 1px solid var(--rule); vertical-align: middle; font-variant-numeric: tabular-nums; }
+tr:last-child td { border-bottom: 0; }
+td .acts { display: flex; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+.life { width: 90px; height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; margin-top: 4px; }
+.life i { display: block; height: 100%; background: var(--ok); }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; margin: 0 0 12px; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips button { all: unset; cursor: pointer; padding: 4px 12px; border-radius: 99px; border: 1px solid var(--rule); font-size: 13px; }
+.chips button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.empty { text-align: center; padding: 30px 10px; color: var(--muted); }
+.feed { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.feed li { display: grid; grid-template-columns: 74px 1fr auto; gap: 10px; padding: 7px 0; border-bottom: 1px dashed var(--rule); font-size: 14px; align-items: center; }
+.feed li:last-child { border-bottom: 0; }
+.feed time { color: var(--muted); font-size: 12px; }
+.bar { height: 10px; border-radius: 5px; background: var(--soft); overflow: hidden; display: flex; }
+.bar i { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; margin-top: 8px; }
+.legend b { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.edge { display: grid; gap: 12px; }
+.edge header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; flex-wrap: wrap; }
+.route { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--muted); }
+.route .mono { color: var(--ink); background: var(--soft); padding: 2px 8px; border-radius: 6px; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stats div { background: var(--soft); border-radius: 8px; padding: 8px 10px; }
+.stats b { display: block; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stats span { font-size: 12px; color: var(--muted); }
+.flow { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 14px; margin: 6px 0 18px; }
+.node { text-align: center; font-size: 13px; color: var(--muted); }
+.node b { display: grid; place-items: center; width: 54px; height: 54px; border-radius: 14px; margin: 0 auto 6px; background: var(--soft); color: var(--ink); }
+.node svg { width: 26px; height: 26px; }
+.wire { position: relative; height: 4px; border-radius: 2px; background: var(--rule); }
+.wire.go { background: linear-gradient(90deg, var(--ok), var(--amber)); }
+.wire.no { background: repeating-linear-gradient(90deg, var(--bad) 0 10px, transparent 10px 16px); }
+.wire em { position: absolute; left: 50%; top: -26px; transform: translateX(-50%); font-style: normal; font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; background: var(--paper); padding: 0 8px; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.checks li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; align-items: start; }
+.checks i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 13px; }
+.checks .y i { background: var(--ok-wash); color: var(--ok); } .checks .n i { background: var(--bad-wash); color: var(--bad); }
+.checks .m i { background: var(--soft); color: var(--muted); }
+.checks small { display: block; color: var(--muted); }
+.verdict { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 10px; margin-bottom: 16px; font-weight: 600; }
+.verdict.ok { border: 1px solid currentColor; } .verdict.bad { border: 1px solid currentColor; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--rule); margin-bottom: 12px; overflow-x: auto; }
+.tabs button { all: unset; cursor: pointer; padding: 8px 14px; font-size: 14px; color: var(--muted); border-bottom: 2px solid transparent; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-color: var(--amber); font-weight: 600; }
+.snippet { position: relative; }
+.snippet pre { background: var(--code); color: #e8edf3; padding: 14px 16px; border-radius: 10px; overflow-x: auto; margin: 0; line-height: 1.6; }
+.snippet .btn { position: absolute; right: 8px; top: 8px; background: #2e3c4e; color: #fff; border-color: #44546a; }
+.note { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+.banner { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 10px; margin-bottom: 14px; font-size: 14px; }
+.toasts { position: fixed; right: 18px; bottom: 18px; display: grid; gap: 8px; z-index: 30; max-width: min(420px, calc(100vw - 36px)); }
+.toast { background: var(--ink); color: var(--paper); padding: 10px 14px; border-radius: 10px; box-shadow: 0 6px 24px rgba(0,0,0,.18); font-size: 14px; }
+.toast.err { background: var(--bad); color: #fff; }
+dialog { border: 1px solid var(--rule); border-radius: 14px; padding: 0; background: var(--paper); color: var(--body); width: min(460px, calc(100vw - 32px)); }
+dialog::backdrop { background: rgba(20, 28, 38, .5); }
+dialog form { padding: 20px; display: grid; gap: 14px; }
+dialog menu { display: flex; justify-content: flex-end; gap: 8px; margin: 0; padding: 0; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-weight: 400; color: var(--body); }
+.check input { width: auto; margin-top: 4px; }
+.login { max-width: 440px; margin: 12vh auto; }
+.login form { display: grid; gap: 12px; margin-top: 14px; }
+.live { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; color: var(--muted); }
+.live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 2s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .live::before { animation: none; } }
+.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; }
+@keyframes r { to { transform: rotate(360deg); } }
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  aside { position: static; height: auto; padding: 12px 16px; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  nav { flex-direction: row; overflow-x: auto; width: 100%; } nav button { white-space: nowrap; padding: 7px 10px; }
+  nav button[aria-current="page"] { box-shadow: inset 0 -3px 0 var(--amber); }
+  .side-foot { display: none; } main { padding: 18px 16px 50px; } .two { grid-template-columns: 1fr; } .stats { grid-template-columns: repeat(2, 1fr); }
+  .feed li { grid-template-columns: 60px 1fr; } .feed li .pill { display: none; }
+  .wire em { top: 10px; white-space: normal; width: 100%; text-align: center; background: none; padding: 0; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+<div id="login" class="login card" hidden>
+  <p class="kicker">PQC console</p>
+  <h1>Enter the access token</h1>
+  <p class="sub">The console printed it when it started, along with a link that signs you in directly. The token stays in this tab only.</p>
+  <form id="loginForm"><label>Access token<input id="tokenIn" type="password" autocomplete="off" required></label>
+  <button class="btn primary">Open the console</button><p id="loginErr" class="sub" role="alert"></p></form>
+</div>
+<div id="app" class="app" hidden>
+<aside>
+  <div class="brand"><div class="mark">Q</div><div><b>PQC console</b><small id="ver">TLS 1.3 + mTLS</small></div></div>
+  <nav aria-label="Pages">
+    <button data-page="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>Overview</button>
+    <button data-page="certificates"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><circle cx="16" cy="17" r="3"/><path d="M15 20l-1 3 2-1 2 1-1-3M7 9h7M7 12h4"/></svg>Certificates</button>
+    <button data-page="edges"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg>Edges</button>
+    <button data-page="test"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/><circle cx="4" cy="12" r="1.5"/></svg>Test a connection</button>
+    <button data-page="setup"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13 6l-2 12"/></svg>Client setup</button>
+  </nav>
+  <div class="side-foot"><span id="caName"></span><span>Local only &middot; every action is audited</span><button id="signOut">Sign out</button></div>
+</aside>
+<main id="main"></main>
+</div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<dialog id="dlg"><form method="dialog" id="dlgForm"></form></dialog>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const state = { page: "overview", certs: null, overview: null, edges: null, filter: "all", query: "", kind: "server", setup: { serial: "", tab: "pqc", host: "localhost:8443" }, timer: 0, test: null };
+let token = "";
+try { token = sessionStorage.getItem("pqc-token") || ""; } catch (e) {}
+if (location.hash.startsWith("#token=")) {
+  token = decodeURIComponent(location.hash.slice(7));
+  try { sessionStorage.setItem("pqc-token", token); } catch (e) {}
+  history.replaceState(null, "", location.pathname);
+}
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === false || v == null) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat(9)) if (k != null && k !== false) el.append(k.nodeType ? k : String(k));
+  return el;
+}
+function svg(markup) { const t = document.createElement("template"); t.innerHTML = markup; return t.content.firstChild; }
+const ICON = {
+  you: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  srv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="7" rx="1.5"/><rect x="4" y="14" width="16" height="7" rx="1.5"/><path d="M8 6.5h.01M8 17.5h.01"/></svg>'
+};
+
+async function api(path, body) {
+  const res = await fetch(path, { method: body ? "POST" : "GET", headers: { "Authorization": "Bearer " + token, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined, cache: "no-store" });
+  if (res.status === 401 || res.status === 429) { signIn(res.status === 429 ? "Too many wrong tokens; wait a minute." : "That token was not accepted."); throw new Error("signed out"); }
+  if ((res.headers.get("Content-Type") || "").includes("zip")) return res.blob();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+function toast(msg, err) {
+  const t = h("div", { class: "toast" + (err ? " err" : ""), role: err ? "alert" : "status" }, msg);
+  $("#toasts").append(t); setTimeout(() => t.remove(), err ? 7000 : 3500);
+}
+async function act(btn, fn) {
+  const old = btn && btn.textContent;
+  if (btn) { btn.disabled = true; btn.replaceChildren(h("span", { class: "spin" }), " Working"); }
+  try { return await fn(); } catch (e) { if (e.message !== "signed out") toast(e.message, true); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = old; } }
+}
+function signIn(msg) {
+  try { sessionStorage.removeItem("pqc-token"); } catch (e) {}
+  token = ""; clearInterval(state.timer);
+  $("#app").hidden = true; $("#login").hidden = false; $("#loginErr").textContent = msg || ""; $("#tokenIn").focus();
+}
+$("#loginForm").addEventListener("submit", async e => {
+  e.preventDefault(); token = $("#tokenIn").value.trim();
+  try { await api("/api/overview"); try { sessionStorage.setItem("pqc-token", token); } catch (x) {} start(); } catch (x) { if (x.message !== "signed out") $("#loginErr").textContent = x.message; }
+});
+$("#signOut").addEventListener("click", () => signIn("Signed out."));
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.page)));
+
+function go(page) {
+  state.page = page;
+  document.querySelectorAll("nav button").forEach(b => b.dataset.page === page ? b.setAttribute("aria-current", "page") : b.removeAttribute("aria-current"));
+  load();
+}
+async function load(quiet) {
+  try {
+    if (state.page === "overview") state.overview = await api("/api/overview");
+    if (["certificates", "test", "setup"].includes(state.page)) state.certs = await api("/api/certificates");
+    if (state.page === "edges") state.edges = await api("/api/edges");
+  } catch (e) { if (e.message === "signed out") return; if (!quiet) toast(e.message, true); state.error = e.message; }
+  if (quiet && document.activeElement && document.activeElement.closest("main form, main input, main select")) return;
+  render();
+}
+function start() {
+  $("#login").hidden = true; $("#app").hidden = false;
+  clearInterval(state.timer);
+  state.timer = setInterval(() => { if (!document.hidden && ["overview", "edges"].includes(state.page)) load(true); }, 5000);
+  go(state.page);
+}
+
+const ago = iso => { const s = (Date.now() - Date.parse(iso)) / 1000; return s < 60 ? "just now" : s < 3600 ? Math.round(s / 60) + " min ago" : s < 86400 ? Math.round(s / 3600) + " h ago" : Math.round(s / 86400) + " d ago"; };
+const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+const head = (kicker, title, sub, ...right) => h("div", { class: "top" }, h("div", {}, h("p", { class: "kicker" }, kicker), h("h1", {}, title), sub && h("p", {}, sub)), h("div", { class: "chips" }, right));
+const status = c => c.renewed && c.status !== "revoked" ? h("span", { class: "pill neutral" }, "renewed") : c.status === "revoked" ? h("span", { class: "pill bad" }, "revoked") : c.days_left < 0 ? h("span", { class: "pill bad" }, "expired") : c.days_left <= 30 ? h("span", { class: "pill warn" }, "expires in " + c.days_left + " d") : h("span", { class: "pill ok" }, "valid");
+
+function render() {
+  const main = $("#main");
+  const view = { overview: viewOverview, certificates: viewCerts, edges: viewEdges, test: viewTest, setup: viewSetup }[state.page]();
+  main.replaceChildren(view);
+}
+
+function viewOverview() {
+  const o = state.overview;
+  if (!o) return h("p", { class: "sub" }, "Loading");
+  $("#ver").textContent = "version " + o.version;
+  const c = o.certificates, e = o.edges, ca = o.ca;
+  if (ca) $("#caName").textContent = ca.subject.replace(/^CN=/, "");
+  const crl = ca && ca.crl;
+  const crlPill = !crl ? h("span", { class: "pill bad" }, "missing") : crl.hours_left < 0 ? h("span", { class: "pill bad" }, "expired") : crl.hours_left < 48 ? h("span", { class: "pill warn" }, "renew soon") : h("span", { class: "pill ok" }, "fresh");
+  const edgePill = !(e.routes + e.unreachable) ? h("span", { class: "pill neutral" }, "none added") : e.unreachable ? h("span", { class: "pill bad" }, e.unreachable + " down") : h("span", { class: "pill ok" }, "all up");
+  const tiles = h("div", { class: "grid tiles" },
+    h("div", { class: "card tile" }, h("h3", {}, "Certificate authority", ca ? h("span", { class: "pill " + (ca.days_left > 90 ? "ok" : "warn") }, ca.days_left > 90 ? "healthy" : "expiring") : h("span", { class: "pill bad" }, "not set")),
+      ca ? [h("div", { class: "big" }, ca.algorithm), h("div", { class: "sub" }, "root valid until " + ca.expires)] : h("div", { class: "sub" }, c.error)),
+    h("div", { class: "card tile" }, h("h3", {}, "Revocation list", crlPill),
+      crl ? [h("div", { class: "big" }, crl.revoked + " revoked"), h("div", { class: "sub" }, "signed " + ago(crl.updated) + ", good for " + (crl.hours_left > 48 ? Math.round(crl.hours_left / 24) + " more days" : Math.max(0, Math.round(crl.hours_left)) + " more hours"))] : h("div", { class: "sub" }, "Run maintenance to sign one")),
+    h("div", { class: "card tile" }, h("h3", {}, "Certificates", c.expiring_30d || c.expired ? h("span", { class: "pill warn" }, (c.expiring_30d + c.expired) + " need renewal") : h("span", { class: "pill ok" }, "up to date")),
+      c.error ? h("div", { class: "sub" }, c.error) : [h("div", { class: "big" }, c.valid + " valid"), h("div", { class: "sub" }, c.revoked + " revoked, " + c.expiring_30d + " expiring within 30 days")]),
+    h("div", { class: "card tile" }, h("h3", {}, "Edges", edgePill),
+      h("div", { class: "big" }, e.routes + " up"), h("div", { class: "sub" }, e.active + " live connection" + (e.active === 1 ? "" : "s") + ", " + e.handshakes + " handshakes so far")));
+  const banner = o.update ? h("div", { class: "banner warn" }, "Version " + o.update.version + " is available. ", h("a", { href: o.update.url, target: "_blank", rel: "noopener" }, "Release notes")) : null;
+  const qs = pct(e.quantum_safe, e.handshakes);
+  const share = h("div", { class: "card" }, h("h2", {}, "Quantum-safe handshakes"),
+    h("p", { class: "sub" }, "Share of connections to your edges whose key exchange includes ML-KEM, so a recording made today cannot be decrypted by a future quantum computer."),
+    h("div", { class: "big" }, e.handshakes ? qs + "%" : "No traffic yet"),
+    h("div", { class: "bar", role: "img", "aria-label": qs + "% quantum-safe" }, h("i", { style: "width:" + qs + "%;background:var(--ok)" }), h("i", { style: "width:" + (e.handshakes ? 100 - qs : 0) + "%;background:var(--amber)" })),
+    h("div", { class: "legend" }, h("span", {}, h("b", { style: "background:var(--ok)" }), "ML-KEM hybrid ", e.quantum_safe), h("span", {}, h("b", { style: "background:var(--amber)" }), "Classical ", e.handshakes - e.quantum_safe), h("span", {}, "Failed handshakes ", e.failed)));
+  const feed = h("div", { class: "card" }, h("h2", {}, "Recent activity"), o.activity.length ? h("ul", { class: "feed" }, o.activity.map(a => h("li", {},
+    h("time", { datetime: a.time, title: a.time }, ago(a.time)), h("span", {}, describe(a)), h("span", { class: "pill " + ({ revoke: "bad", test: a.ok ? "ok" : "bad" }[a.action] || "neutral") }, a.action)))) : h("p", { class: "sub" }, "Issued, revoked and renewed certificates and connection tests show up here."));
+  const quick = h("div", { class: "chips" }, h("button", { class: "btn primary", onclick: () => go("certificates") }, "Issue a certificate"), h("button", { class: "btn", onclick: () => go("test") }, "Test a connection"));
+  return h("div", {}, head("Overview", "Your post-quantum TLS at a glance", "Live from your CA folder and the edges you added. Refreshes every 5 seconds.", h("span", { class: "live" }, "live"), quick), banner, tiles, h("div", { class: "grid two", style: "margin-top:14px" }, share, feed));
+}
+function describe(a) {
+  if (a.action === "issue") return "Issued a " + a.kind + " certificate for " + a.common_name;
+  if (a.action === "revoke") return "Revoked " + (a.common_name || a.serial.slice(0, 10)) + (a.reason && a.reason !== "unspecified" ? " (" + a.reason + ")" : "");
+  if (a.action === "renew") return "Renewed " + a.common_name;
+  if (a.action === "download") return "Downloaded " + a.common_name + (a.key ? " with its key" : "");
+  if (a.action === "maintain") return "Maintenance: " + (a.renewed.length ? a.renewed.length + " renewed" : "nothing to renew") + ", revocation list re-signed";
+  if (a.action === "test") return "Tested " + a.target + (a.ok ? ", connected" : ", failed");
+  return a.action;
+}
+
+function viewCerts() {
+  const d = state.certs;
+  if (!d) return h("p", { class: "sub" }, state.error || "Loading");
+  const kinds = { server: "A website or API, behind the edge", client: "A partner, app or person connecting in (mutual TLS)", site: "Both: a service that also connects out" };
+  const form = h("form", { class: "issue", onsubmit: e => { e.preventDefault(); const f = e.target, b = f.querySelector("button.primary");
+      act(b, async () => { const r = await api("/api/certificates/issue", { kind: state.kind, common_name: f.cn.value, names: f.names.value, algorithm: f.alg.value, days: f.days.value });
+        toast("Issued " + r.common_name + " (" + r.serial.slice(0, 10) + ")"); f.cn.value = f.names.value = ""; state.certs = await api("/api/certificates"); render(); }); } },
+    h("label", {}, "Kind", h("div", { class: "seg", role: "group" }, ["server", "client", "site"].map(k => h("button", { type: "button", "aria-pressed": String(state.kind === k), title: kinds[k], onclick: () => { state.kind = k; render(); } }, k)))),
+    h("label", {}, "Name", h("span", {}, state.kind === "client" ? "e.g. partner-bank or alice" : "e.g. api.example.com"), h("input", { name: "cn", required: true, maxlength: 64, autocomplete: "off" })),
+    h("label", {}, "Other names", h("span", {}, "comma separated DNS names or IPs"), h("input", { name: "names", placeholder: "localhost, 10.0.0.5", autocomplete: "off" })),
+    h("label", {}, "Algorithm", h("span", {}, "ML-DSA-65 suits most uses"), h("select", { name: "alg" }, ["ML-DSA-65", "ML-DSA-87", "ML-DSA-44"].map(a => h("option", {}, a)))),
+    h("label", {}, "Valid for", h("span", {}, "days"), h("input", { name: "days", type: "number", min: 1, max: 3650, value: 397 })),
+    h("button", { class: "btn primary" }, "Issue certificate"));
+  const counts = { all: d.certificates.length, valid: 0, expiring: 0, revoked: 0 };
+  d.certificates.forEach(c => { if (c.status === "revoked") counts.revoked++; else if (c.days_left <= 30) counts.expiring++; else counts.valid++; });
+  const rows = d.certificates.filter(c => (state.filter === "all" || (state.filter === "revoked" ? c.status === "revoked" : state.filter === "expiring" ? c.status !== "revoked" && c.days_left <= 30 : c.status !== "revoked" && c.days_left > 30))
+    && (!state.query || (c.common_name + " " + c.serial + " " + c.names.join(" ")).toLowerCase().includes(state.query)));
+  const table = rows.length ? h("div", { class: "table" }, h("table", {}, h("thead", {}, h("tr", {}, ["Name", "Kind", "Algorithm", "Expires", "Status", ""].map(t => h("th", {}, t)))),
+    h("tbody", {}, rows.map(c => h("tr", {},
+      h("td", {}, h("b", { style: "color:var(--ink)" }, c.common_name), h("div", { class: "sub mono" }, c.serial.slice(0, 16), c.names.length > 1 ? " · " + c.names.slice(1).join(", ") : "")),
+      h("td", {}, c.kind), h("td", {}, c.algorithm),
+      h("td", {}, c.not_after.slice(0, 10), h("div", { class: "life" }, h("i", { style: "width:" + Math.max(2, Math.min(100, c.days_left / 4)) + "%;background:" + (c.days_left <= 30 ? "var(--amber)" : "var(--ok)") }))),
+      h("td", {}, status(c)),
+      h("td", {}, h("div", { class: "acts" }, c.status !== "revoked" && c.has_files ? [
+        h("button", { class: "btn small", onclick: () => download(c) }, "Download"),
+        c.kind !== "server" ? h("button", { class: "btn small", onclick: () => { state.setup.serial = c.serial; go("setup"); } }, "Set up") : null,
+        h("button", { class: "btn small", onclick: e => act(e.target, async () => { const r = await api("/api/certificates/renew", { serial: c.serial }); toast("Renewed " + c.common_name + ": new serial " + r.serial.slice(0, 10)); state.certs = await api("/api/certificates"); render(); }) }, "Renew")] : null,
+        c.status !== "revoked" ? h("button", { class: "btn small danger", onclick: () => revoke(c) }, "Revoke") : null)))))))
+    : h("p", { class: "empty" }, d.certificates.length ? "Nothing matches." : "No certificates yet. Issue the first one above: a server certificate for your edge, then a client certificate for each partner.");
+  return h("div", {}, head("Certificates", "Issue, renew and revoke", "Signed by " + d.root.subject.replace(/^CN=/, "") + " (" + d.root.algorithm + "). New keys and certificates are written to " + d.root.folder + ".",
+      h("button", { class: "btn", title: "Renews certificates that expire within 30 days, in place, and re-signs the revocation list", onclick: e => act(e.target, async () => { const r = await api("/api/certificates/maintain", {}); toast(r.renewed.length ? "Renewed " + r.renewed.join(", ") : "Nothing due for renewal; revocation list re-signed"); state.certs = await api("/api/certificates"); render(); }) }, "Run maintenance")),
+    h("div", { class: "card" }, h("h2", { style: "margin-bottom:12px" }, "Issue a certificate"), form),
+    h("div", { class: "card", style: "margin-top:14px" },
+      h("div", { class: "toolbar" }, h("div", { class: "chips", role: "group", "aria-label": "Filter" }, Object.entries(counts).map(([k, n]) => h("button", { "aria-pressed": String(state.filter === k), onclick: () => { state.filter = k; render(); } }, k + " " + n))),
+        h("input", { type: "search", placeholder: "Search name or serial", value: state.query, style: "max-width:240px", "aria-label": "Search", oninput: e => { state.query = e.target.value.toLowerCase(); const pos = e.target.selectionStart; render(); const s = $("main input[type=search]"); s.focus(); s.setSelectionRange(pos, pos); } })),
+      table));
+}
+function dialog(build) {
+  const dlg = $("#dlg"), form = $("#dlgForm");
+  form.replaceChildren(...build(() => dlg.close()));
+  dlg.showModal();
+}
+function download(c) {
+  dialog(close => {
+    const key = h("input", { type: "checkbox", name: "key" });
+    return [h("h2", {}, "Download " + c.common_name),
+      h("p", { class: "sub" }, "A zip with cert.pem, chain.pem and ca.crt."),
+      h("label", { class: "check" }, key, h("div", {}, "Include the private key (key.pem)", h("span", { style: "display:block" }, "Only for moving it to the machine that uses it. Anyone holding it can act as " + c.common_name + "; the download is recorded."))),
+      h("menu", {}, h("button", { class: "btn", value: "cancel" }, "Cancel"), h("button", { class: "btn primary", type: "button", onclick: e => act(e.target, async () => {
+        const blob = await api("/api/certificates/download", { serial: c.serial, key: key.checked });
+        const a = h("a", { href: URL.createObjectURL(blob), download: c.common_name.replace(/[^\w.-]/g, "_") + "-" + c.serial.slice(0, 8) + ".zip" });
+        document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); close(); toast("Downloaded " + c.common_name); }) }, "Download"))];
+  });
+}
+function revoke(c) {
+  dialog(close => {
+    const reason = h("select", {}, [["unspecified", "No reason given"], ["keyCompromise", "Key stolen or exposed"], ["superseded", "Replaced by a new certificate"], ["cessationOfOperation", "No longer used"], ["affiliationChanged", "Left the organisation"]].map(([v, t]) => h("option", { value: v }, t)));
+    return [h("h2", {}, "Revoke " + c.common_name + "?"),
+      h("p", { class: "sub" }, "Edges that read this CA's revocation list refuse it at the next connection. This cannot be undone."),
+      h("label", {}, "Reason", reason),
+      h("menu", {}, h("button", { class: "btn", value: "cancel" }, "Cancel"), h("button", { class: "btn primary", type: "button", style: "background:var(--bad);border-color:var(--bad);color:#fff", onclick: e => act(e.target, async () => {
+        await api("/api/certificates/revoke", { serial: c.serial, reason: reason.value }); close(); toast("Revoked " + c.common_name + "; revocation list updated"); state.certs = await api("/api/certificates"); render(); }) }, "Revoke"))];
+  });
+}
+
+function viewEdges() {
+  const list = state.edges;
+  if (!list) return h("p", { class: "sub" }, state.error || "Loading");
+  const how = h("div", { class: "card" }, h("h2", {}, "Add an edge"), h("p", { class: "sub" }, "Start the edge with a metrics address, then start the console with --edge pointing at it."),
+    snippet("pqc tls edge --target 127.0.0.1:8080 --cert server/chain.pem --key server/key.pem --metrics 127.0.0.1:9100\npqc console --ca pki --edge http://127.0.0.1:9100"));
+  const cards = list.map(e => {
+    if (e.error) return h("div", { class: "card edge" }, h("header", {}, h("div", {}, h("h2", {}, e.source), h("p", { class: "sub" }, e.error)), h("span", { class: "pill bad" }, "unreachable")));
+    const groups = Object.entries(e.groups || {}).sort((a, b) => b[1] - a[1]), total = groups.reduce((s, g) => s + g[1], 0);
+    const colors = ["var(--ok)", "#3c8dbc", "var(--amber)", "#9b6bc4", "#888"];
+    return h("div", { class: "card edge" },
+      h("header", {}, h("div", {}, h("h2", {}, e.name), h("div", { class: "route" }, h("span", {}, e.mode === "originate" ? "plain clients" : "clients"), "→", h("span", { class: "mono" }, e.listen), "→", h("span", { class: "mono" }, e.target))),
+        h("div", { class: "chips" }, h("span", { class: "pill neutral" }, e.policy), h("span", { class: "pill ok" }, "up"))),
+      h("div", { class: "stats" }, [["active", "live connections"], ["handshakes", "handshakes"], ["quantum_safe", "quantum-safe"], ["handshake_failed", "refused or failed"]].map(([k, t]) => h("div", {}, h("b", {}, e[k] || 0), h("span", {}, t)))),
+      total ? [h("div", { class: "bar", role: "img", "aria-label": "key exchange groups" }, groups.map((g, i) => h("i", { style: "width:" + pct(g[1], total) + "%;background:" + colors[i % colors.length] }))),
+        h("div", { class: "legend" }, groups.map((g, i) => h("span", {}, h("b", { style: "background:" + colors[i % colors.length] }), g[0] + " " + g[1])))] : h("p", { class: "sub", style: "margin:0" }, "No handshakes yet."),
+      e.upstream_failed ? h("p", { class: "sub", style: "margin:0;color:var(--bad)" }, e.upstream_failed + " connections could not reach " + e.target) : null);
+  });
+  return h("div", {}, head("Edges", "Live traffic through your edges", "From each edge's /status. Refreshes every 5 seconds.", list.length ? h("span", { class: "live" }, "live") : null), h("div", { class: "grid" }, cards, list.length ? null : how));
+}
+
+function clientOptions(sel, filter, revoked) {
+  const certs = (state.certs ? state.certs.certificates : []).filter(c => (revoked || c.status === "valid" && c.days_left >= 0) && c.has_files && filter(c));
+  return [h("option", { value: "" }, sel === undefined ? "None (server certificate check only)" : "Choose a certificate"), certs.map(c => h("option", { value: c.serial, selected: c.serial === sel }, c.common_name + " · " + c.kind + " · " + c.serial.slice(0, 8) + (c.status === "revoked" ? " · revoked" : "")))];
+}
+function viewTest() {
+  const t = state.test;
+  const form = h("form", { class: "issue", onsubmit: e => { e.preventDefault(); const f = e.target, b = f.querySelector("button.primary");
+      const body = { target: f.addr.value, server_name: f.sni.value, policy: f.policy.value, client: f.client.value };
+      state.testForm = body;
+      act(b, async () => { state.test = await api("/api/test", body); render(); }); } },
+    h("label", {}, "Address", h("span", {}, "host:port of an edge or server"), h("input", { name: "addr", required: true, placeholder: "localhost:8443", value: (state.testForm || {}).target || "localhost:8443" })),
+    h("label", {}, "Name to verify", h("span", {}, "optional; defaults to the host"), h("input", { name: "sni", value: (state.testForm || {}).server_name || "" })),
+    h("label", {}, "Policy", h("span", {}, "what this client accepts"), h("select", { name: "policy" }, [["strict", "strict: post-quantum only"], ["transition", "transition: also classical"], ["cnsa2", "cnsa2: ML-KEM-1024, ML-DSA-87"]].map(([v, x]) => h("option", { value: v, selected: ((state.testForm || {}).policy || "strict") === v }, x)))),
+    h("label", {}, "Client certificate", h("span", {}, "for edges that require mutual TLS"), h("select", { name: "client" }, clientOptions(undefined, c => c.kind !== "server", true))),
+    h("button", { class: "btn primary" }, "Connect"));
+  if (state.testForm && state.testForm.client) form.client.value = state.testForm.client;
+  return h("div", {}, head("Test a connection", "Does it really connect quantum-safe?", "The console connects as a client of your CA and shows exactly what was negotiated, or why it was refused."),
+    h("div", { class: "card" }, form), t ? h("div", { class: "card", style: "margin-top:14px" }, result(t)) : null);
+}
+function result(t) {
+  const off = t.offers;
+  const pq = g => g && /MLKEM/i.test(g);
+  const items = [];
+  items.push([!!(t.version || off) || t.ok, "Reached " + t.target, t.version || off ? "TCP connection and TLS hello answered" : t.error]);
+  if (t.version) items.push([t.version === "TLSv1.3", "TLS 1.3", t.cipher]);
+  if (t.group || off) { const g = t.group || off.group; items.push([pq(g), "Key exchange: " + g, pq(g) ? "Hybrid with ML-KEM: quantum-safe against record-now, decrypt-later" : "Classical only: traffic recorded today could be decrypted by a future quantum computer"]); }
+  if (t.peer_key || off) { const k = t.peer_key || off.peer_key; items.push([/ML-DSA|SLH-DSA/.test(k || ""), "Server certificate: " + (k || "unknown"), t.peer ? t.peer + ", valid until " + t.peer_expires : off ? (off.peer || "") + (t.version ? "" : " (seen without verifying)") : ""]); }
+  if (t.version) items.push([true, "Issued by your CA", "The chain verified against your root and the name matched"]);
+  else if (off && pq(off.group)) items.push([false, "Issued by your CA", t.error]);
+  if (t.client) items.push([t.ok, "Client certificate accepted", t.ok ? "Mutual TLS passed: the server checked our certificate and the revocation list" : t.refused_after_handshake ? t.error : "Not reached"]);
+  else if (t.version) items.push([null, "No client certificate sent", t.ok ? "This server does not require one" : ""]);
+  const why = t.ok ? null : explainFail(t);
+  return h("div", {},
+    h("div", { class: "verdict " + (t.ok && t.quantum_safe ? "ok" : t.ok ? "warn" : "bad") }, t.ok && t.quantum_safe ? "Connected, quantum-safe" : t.ok ? "Connected, but not quantum-safe" : "Refused", h("span", { class: "sub", style: "margin-left:auto;font-weight:400" }, t.ms + " ms · policy " + t.policy)),
+    h("div", { class: "flow" }, h("div", { class: "node" }, h("b", {}, svg(ICON.you)), "Console", t.client ? h("div", {}, "as client") : null),
+      h("div", { class: "wire " + (t.ok ? "go" : "no") }, h("em", {}, (t.group || (off && off.group) || "no handshake") + (t.peer_key ? " · " + t.peer_key : ""))),
+      h("div", { class: "node" }, h("b", {}, svg(ICON.srv)), t.target)),
+    h("ul", { class: "checks" }, items.map(([ok, title, small]) => h("li", { class: ok === null ? "m" : ok ? "y" : "n" }, h("i", {}, ok === null ? "–" : ok ? "✓" : "✕"), h("div", {}, title, small ? h("small", {}, small) : null)))),
+    why ? h("p", { class: "note", style: "font-size:14px;color:var(--body)" }, h("b", {}, "What to do: "), why) : null);
+}
+function explainFail(t) {
+  const off = t.offers, e = (t.error || "").toLowerCase();
+  if (t.refused_after_handshake && t.client_status === "revoked") return "Refused as it should be: this client certificate is revoked, and the edge checked the revocation list before letting it in.";
+  if (t.refused_after_handshake) return t.client ? "Check the certificate is not revoked or expired and that the edge trusts this CA (--ca). If those are fine, the service behind the edge may be down." : "The server wants a client certificate. Pick one above and connect again.";
+  if (!off) return e.includes("refused") ? "Nothing is listening there. Start the edge or check the port." : e.includes("not found") ? "The host name does not resolve. Use an IP address and put the name in 'Name to verify'." : "The server did not answer a TLS hello. Check the address and that it serves TLS on that port.";
+  if (!/MLKEM/i.test(off.group || "")) return "The server only offers classical key exchange. Put the PQC edge in front of it, or choose the transition policy to see it connect classically.";
+  if (!/ML-DSA|SLH-DSA/.test(off.peer_key || "")) return "The server's certificate is not post-quantum (" + (off.peer_key || "unknown") + "). The strict policy only accepts ML-DSA; issue it a certificate here or try the transition policy.";
+  if (e.includes("hostname") || e.includes("mismatch") || e.includes("ip address")) return "The certificate does not name this host. Enter its name in 'Name to verify', or reissue it with this name.";
+  return "The server's certificate was not issued by this console's CA, or it has expired. Issue it a certificate here and restart the edge with it.";
+}
+
+function snippet(text) {
+  const pre = h("pre", {}, text);
+  return h("div", { class: "snippet" }, pre, h("button", { class: "btn small", type: "button", onclick: e => {
+    const done = () => { e.target.textContent = "Copied"; setTimeout(() => e.target.textContent = "Copy", 1500); };
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(done, () => { const r = document.createRange(); r.selectNodeContents(pre); getSelection().removeAllRanges(); getSelection().addRange(r); });
+  } }, "Copy"));
+}
+function viewSetup() {
+  const s = state.setup, certs = state.certs ? state.certs.certificates : [];
+  const c = certs.find(x => x.serial === s.serial);
+  const [host, port] = (() => { const i = s.host.lastIndexOf(":"); return i > 0 ? [s.host.slice(0, i), s.host.slice(i + 1)] : [s.host, "8443"]; })();
+  const tabs = { pqc: "pqc command", curl: "curl", python: "Python", nginx: "nginx", other: "Java and other apps" };
+  const code = {
+    pqc: `pqc tls connect ${host}:${port} --ca ca.crt --cert chain.pem --key key.pem`,
+    curl: `curl --cacert ca.crt --cert chain.pem --key key.pem \\\n     --curves X25519MLKEM768 https://${host}:${port}/`,
+    python: `import ssl, urllib.request\n\nctx = ssl.create_default_context(cafile="ca.crt")\nctx.load_cert_chain("chain.pem", "key.pem")\nprint(urllib.request.urlopen("https://${host}:${port}/", context=ctx).read())`,
+    nginx: `# nginx as a client of the edge (proxying to it with mutual TLS)\nlocation / {\n    proxy_pass                https://${host}:${port};\n    proxy_ssl_certificate     /etc/pqc/chain.pem;\n    proxy_ssl_certificate_key /etc/pqc/key.pem;\n    proxy_ssl_trusted_certificate /etc/pqc/ca.crt;\n    proxy_ssl_verify          on;\n    proxy_ssl_protocols       TLSv1.3;\n    proxy_ssl_conf_command    Groups X25519MLKEM768;\n}`,
+    other: `# Run a local edge in originate mode; the app talks plain TCP to it,\n# the edge does post-quantum TLS with this certificate to the server.\npqc tls edge --mode originate --listen 127.0.0.1:9443 --target ${host}:${port} \\\n    --ca ca.crt --cert chain.pem --key key.pem\n\n# Then point the app (Java, .NET, an old service) at\n#   http://127.0.0.1:9443/`,
+  };
+  const notes = {
+    pqc: "Works anywhere pqc is installed. Add --send 'GET / HTTP/1.0\\r\\n\\r\\n' to see a reply.",
+    curl: "Needs curl built with OpenSSL 3.5 or newer (check with curl -V); older builds cannot verify ML-DSA certificates.",
+    python: "Needs a Python whose ssl module uses OpenSSL 3.5 or newer (python -c \"import ssl; print(ssl.OPENSSL_VERSION)\").",
+    nginx: "Needs nginx built with OpenSSL 3.5 or newer. With an older nginx, use the originate edge on the last tab.",
+    other: "For anything whose TLS library cannot do ML-KEM and ML-DSA yet, including Java's built-in TLS today. Nothing in the app changes.",
+  };
+  return h("div", {}, head("Client setup", "Connect an app with its certificate", "Download the certificate's zip (cert.pem, chain.pem, key.pem, ca.crt), unpack it next to the app, then use one of these."),
+    h("div", { class: "card" }, h("form", { class: "issue", onsubmit: e => e.preventDefault() },
+      h("label", {}, "Certificate", h("select", { onchange: e => { s.serial = e.target.value; render(); } }, clientOptions(s.serial || "", x => true))),
+      h("label", {}, "Edge address", h("span", {}, "host:port clients connect to"), h("input", { value: s.host, onchange: e => { s.host = e.target.value.trim() || "localhost:8443"; render(); } })),
+      c ? h("button", { class: "btn primary", type: "button", onclick: () => download(c) }, "Download " + c.common_name) : null)),
+    h("div", { class: "card", style: "margin-top:14px" },
+      h("div", { class: "tabs", role: "tablist" }, Object.entries(tabs).map(([k, t]) => h("button", { role: "tab", "aria-selected": String(s.tab === k), onclick: () => { s.tab = k; render(); } }, t))),
+      c && c.kind === "server" ? h("p", { class: "note", style: "margin:0 0 10px;color:var(--warn)" }, c.common_name + " is a server certificate. Clients need a client or site certificate.") : null,
+      snippet(code[s.tab]), h("p", { class: "note" }, notes[s.tab])));
+}
+
+if (token) api("/api/overview").then(start, e => { if (e.message !== "signed out") signIn(e.message); }); else signIn();
+</script>
+</body>
+</html>

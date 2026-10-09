@@ -26,6 +26,9 @@ pqc = "pqc.cli:main"
 [tool.setuptools.packages.find]
 include = ["pqc*"]
 
+[tool.setuptools.package-data]
+"pqc.console" = ["console.html"]
+
 [tool.distutils.build]
 build_base = "dist/.build"  # keeps `pip wheel .` from leaving build/ in the source tree
 

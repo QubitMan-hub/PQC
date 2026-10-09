@@ -318,3 +318,7 @@ section.alt + section { padding-top: 88px; }
   .plain { display: block; overflow-x: auto; }
 }
 .plain code, .fine code, .tick code, .steps p code, .words code { font: 0.92em var(--mono); background: var(--amber-wash); padding: 1px 5px; border-radius: 4px; }
+.shot { margin: 28px 0 0; border: 1px solid var(--rule); border-radius: 12px; overflow: hidden; box-shadow: 0 10px 30px rgba(46, 60, 78, .12); }
+.shot img { width: 100%; height: auto; }
+#console .plain { margin-top: 20px; }
+#console pre { margin-bottom: 12px; }
