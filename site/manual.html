@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guide · Acxelin PQC: TLS 1.3 + mTLS</title>
+<meta name="description" content="Step by step: install, create your certificate authority, protect a connection, require client certificates, revoke one, and put your own application behind the post-quantum edge.">
+<meta name="theme-color" content="#faf9f5">
+<link rel="icon" href="assets/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/host-grotesk.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/roboto.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap">
+    <a href="index.html" aria-label="Acxelin PQC home"><img src="assets/acxelin-quantum.svg" alt="Acxelin Quantum" width="537" height="83"></a>
+    <nav id="nav" aria-label="Main">
+      <a href="index.html#tls">TLS 1.3 + mTLS</a>
+      <a href="index.html#how">How it works</a>
+      <a href="index.html#ca">Certificate authority</a>
+      <a href="manual.html" aria-current="page">Guide</a>
+    </nav>
+    <button class="menu" type="button" aria-expanded="false" aria-controls="nav"><span></span>Menu</button>
+  </div>
+</header>
+
+<main id="main">
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <p class="kicker">Guide · TLS 1.3 + mTLS</p>
+        <h1>From nothing to a protected service, <span>step by step</span>.</h1>
+        <p class="lead">Each step is one or two commands, with what you should see. It takes about fifteen minutes. Everything runs on your own computer.</p>
+      </div>
+    </div>
+  </div>
+
+  <section id="words">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">Four words first</p>
+        <h2>What the commands talk about</h2>
+      </div>
+      <dl class="words">
+        <div><dt>TLS</dt><dd>The lock on a connection. The server proves who it is, and everything sent is encrypted.</dd></div>
+        <div><dt>Mutual TLS (mTLS)</dt><dd>Both sides prove who they are: the client shows a certificate too.</dd></div>
+        <div><dt>Certificate authority (CA)</dt><dd>Your own issuer of certificates, the ID cards that servers and clients show.</dd></div>
+        <div><dt>CRL</dt><dd>The CA's signed list of cancelled (revoked) certificates. Servers check it on every connection.</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section id="install" class="alt">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">Before you start</p>
+        <h2>Install</h2>
+        <p>You need Python 3.11 or newer and OpenSSL 3.5 or newer. Python has it built in only on recent Linux, so most computers need one extra step:</p>
+      </div>
+      <table class="plain">
+        <tr><th>Your computer</th><th>Get OpenSSL 3.5</th></tr>
+        <tr><td>Windows</td><td>Install the 64-bit OpenSSL 3.5 (or newer) build for Windows. Then, in PowerShell: <code>$env:PQC_OPENSSL = "C:\Program Files\OpenSSL-Win64\bin"</code> (the folder that holds <code>libssl-3-x64.dll</code>).</td></tr>
+        <tr><td>macOS</td><td><code>brew install openssl@3</code>, then <code>export PQC_OPENSSL="$(brew --prefix openssl@3)/lib"</code></td></tr>
+        <tr><td>Debian 13, Ubuntu 25.04+</td><td>Nothing to do: it is the system OpenSSL.</td></tr>
+        <tr><td>Anything with Docker</td><td>Skip all of this: <code>docker build -t pqc https://github.com/QubitMan-hub/PQC.git#main</code>, then <code>docker run --rm pqc</code> runs the tour.</td></tr>
+      </table>
+      <p>Then get the code and install it:</p>
+      <pre>git clone https://github.com/QubitMan-hub/PQC
+cd PQC
+pip install .
+pqc doctor</pre>
+      <p class="fine"><b>You should see</b> <code>TLS edge: ready</code>. If it says OpenSSL was not found or is too old, the message names the next step; fix that before going on.</p>
+    </div>
+  </section>
+
+  <section id="steps">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">Step by step</p>
+        <h2>Protect a connection</h2>
+        <p>Work in an empty folder. Some steps need a second terminal: open it in the same folder.</p>
+      </div>
+      <ol class="steps">
+        <li>
+          <h3>Watch the one-minute tour</h3>
+          <pre>pqc try</pre>
+          <p class="fine"><b>You should see</b> a page fetched with <code>X25519MLKEM768</code> and <code>ML-DSA-65</code>, and a classical-only client <code>refused, as it should be</code>. It cleans up after itself.</p>
+        </li>
+        <li>
+          <h3>Create your certificate authority</h3>
+          <pre>pqc ca init --name "My Test Root"</pre>
+          <p>It asks for a passphrase twice: this protects the CA's key, so remember it. Everything goes in a folder called <code>pki</code>.</p>
+          <p class="fine"><b>You should see</b> <code>created ML-DSA-87 root 'My Test Root' in pki</code></p>
+        </li>
+        <li>
+          <h3>Give a server its certificate</h3>
+          <pre>pqc ca issue server localhost --san 127.0.0.1 --out server</pre>
+          <p class="fine"><b>You should see</b> <code>issued server certificate … for localhost (ML-DSA-65)</code> and three files in <code>server</code>.</p>
+        </li>
+        <li>
+          <h3>Test a protected connection</h3>
+          <p>In the first terminal, start a test server that repeats back whatever it receives. Leave it running:</p>
+          <pre>pqc tls serve --listen 127.0.0.1:8443 --cert server/chain.pem --key server/key.pem</pre>
+          <p>In the second terminal, connect to it:</p>
+          <pre>pqc tls connect localhost:8443 --ca pki/ca.crt --send hello</pre>
+          <p class="fine"><b>You should see</b> <code>group X25519MLKEM768</code> (the post-quantum key exchange), <code>peer_key ML-DSA-65</code> (the post-quantum certificate) and <code>reply hello</code>. Stop the server with Ctrl+C.</p>
+        </li>
+        <li>
+          <h3>Let in only clients with a certificate (mutual TLS)</h3>
+          <p>Issue a certificate for a client called alice:</p>
+          <pre>pqc ca issue client alice --out alice</pre>
+          <p>In the first terminal, start the test server again, now asking every client for a certificate from your CA and checking the revocation list:</p>
+          <pre>pqc tls serve --listen 127.0.0.1:8443 --cert server/chain.pem --key server/key.pem --ca pki/ca.crt --require-client-cert --crl pki/crl.pem</pre>
+          <p>In the second terminal, connect without a certificate, then as alice:</p>
+          <pre>pqc tls connect localhost:8443 --ca pki/ca.crt --send hello
+pqc tls connect localhost:8443 --ca pki/ca.crt --cert alice/chain.pem --key alice/key.pem --send hello</pre>
+          <p class="fine"><b>You should see</b> the first one refused (<code>it refused our client certificate</code>) and alice get <code>reply hello</code>.</p>
+        </li>
+        <li>
+          <h3>Cut a client off: revoke</h3>
+          <p>Alice's laptop is stolen. Find her certificate's serial number (the first column), then revoke it:</p>
+          <pre>pqc ca list
+pqc ca revoke SERIAL --reason keyCompromise</pre>
+          <p>Connect as alice again, with the same command as before:</p>
+          <pre>pqc tls connect localhost:8443 --ca pki/ca.crt --cert alice/chain.pem --key alice/key.pem --send hello</pre>
+          <p class="fine"><b>You should see</b> alice refused. The server's terminal says <code>certificate … was revoked</code>. Nobody restarted the server. Stop it with Ctrl+C.</p>
+        </li>
+        <li>
+          <h3>Put your own application behind it</h3>
+          <p>Start your application on port 8080. To try with a stand-in, Python's built-in web server will do:</p>
+          <pre>python -m http.server 8080 --bind 127.0.0.1</pre>
+          <p>In another terminal, put the edge in front of it. The application does not change:</p>
+          <pre>pqc tls edge --listen 127.0.0.1:8443 --target 127.0.0.1:8080 --cert server/chain.pem --key server/key.pem</pre>
+          <p>Check the protection:</p>
+          <pre>pqc tls connect localhost:8443 --ca pki/ca.crt</pre>
+          <p class="fine"><b>You should see</b> <code>X25519MLKEM768</code> and <code>ML-DSA-65</code>. Your application's own clients connect to port 8443 and trust <code>pki/ca.crt</code>. For mutual TLS, add <code>--ca pki/ca.crt --require-client-cert --crl pki/crl.pem</code> to the edge, as in step 5.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="choose" class="alt">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">Choices</p>
+        <h2>Which policy</h2>
+        <p>Set it with <code>--policy</code> on the edge.</p>
+      </div>
+      <table class="plain">
+        <tr><th>Policy</th><th>Who gets in</th><th>Use it for</th></tr>
+        <tr><td><code>strict</code> (default)</td><td>Only post-quantum clients</td><td>APIs, databases, partners, anything you control both ends of</td></tr>
+        <tr><td><code>transition</code></td><td>Also classical clients; add <code>--fallback-cert</code> and <code>--fallback-key</code> (an ECDSA or RSA certificate) for browsers</td><td>Websites, while browsers cannot check ML-DSA yet</td></tr>
+        <tr><td><code>cnsa2</code></td><td>Only ML-KEM-1024, ML-DSA-87 and AES-256</td><td>The stronger profile CNSA 2.0 asks for</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="run">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">Keep it running</p>
+        <h2>After the first day</h2>
+      </div>
+      <ul class="tick">
+        <li><b>Once a day:</b> <code>pqc ca maintain</code> renews certificates that expire within 30 days and re-signs the revocation list. An expired list refuses everyone, on purpose. Schedule it with Task Scheduler on Windows or cron elsewhere.</li>
+        <li><b>Several routes, one file:</b> <code>examples/edge.toml</code> shows every setting; run it with <code>pqc tls edge --config edge.toml</code>. Changes load without a restart.</li>
+        <li><b>CA on another machine:</b> <code>pqc ca publish</code> serves the revocation list, and <code>crl_url</code> in the edge's file fetches it every minute.</li>
+        <li><b>Before going live:</b> <code>pqc doctor --ca pki --config edge.toml</code> checks key protection, revocation list freshness, expiring certificates and risky settings.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="trouble" class="alt">
+    <div class="wrap">
+      <div class="intro">
+        <p class="kicker">If something goes wrong</p>
+        <h2>Troubleshooting</h2>
+      </div>
+      <table class="plain">
+        <tr><th>What you see</th><th>What to do</th></tr>
+        <tr><td><code>pqc</code> is not found</td><td>Use the same terminal and Python you installed with, or run <code>python -m pqc</code> instead.</td></tr>
+        <tr><td>OpenSSL 3.5+ was not found, or is too old</td><td>Install it as in <a href="#install">Install</a>, set <code>PQC_OPENSSL</code>, and run <code>pqc doctor</code> again.</td></tr>
+        <tr><td>connection refused</td><td>Nothing is listening on that port: start the server or edge first, and check the port number.</td></tr>
+        <tr><td>it refused our client certificate</td><td>Mutual TLS is on: give <code>--cert</code> and <code>--key</code>, and check the certificate is not revoked (<code>pqc ca list</code>).</td></tr>
+        <tr><td>The name does not match the certificate</td><td>Connect with the name the certificate was issued for, or add <code>--server-name NAME</code>.</td></tr>
+        <tr><td>Everyone is refused after a week</td><td>The revocation list expired: run <code>pqc ca maintain</code>, and schedule it daily.</td></tr>
+      </table>
+      <p class="fine">Never switch off certificate checks to make a connection work: fix the CA, the name, the clock or the policy instead.</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="brand">
+      <a href="index.html" aria-label="Acxelin PQC"><img src="assets/acxelin-quantum.svg" alt="Acxelin Quantum" width="537" height="83"></a>
+      <p>Post-quantum TLS for the services you run today.</p>
+    </div>
+    <nav aria-label="Footer">
+      <div><b>TLS 1.3 + mTLS</b><a href="index.html#tls">The product</a><a href="index.html#how">How it works</a><a href="index.html#ca">Certificate authority</a><a href="manual.html">Guide</a></div>
+      <div><b>Documentation</b><a href="https://github.com/QubitMan-hub/PQC#install">Install</a><a href="https://github.com/QubitMan-hub/PQC/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/QubitMan-hub/PQC">Source code</a></div>
+    </nav>
+    <small>© 2026 Acxelin Quantum. ML-KEM (FIPS 203), ML-DSA (FIPS 204), SLH-DSA (FIPS 205).</small>
+  </div>
+</footer>
+<script src="site.js" defer></script>
+</body>
+</html>

@@ -6,7 +6,16 @@ Post-quantum TLS in front of any TCP service, mutual TLS between services, and y
 - **Mutual TLS:** only clients with a certificate from your CA get in; a revoked one is refused at its next connection.
 - **Certificate authority:** ML-DSA or SLH-DSA roots and issuing CAs, revocation lists, renewal, EST and ACME enrollment, AWS KMS or HSM keys.
 
-The diagram in [site/how-it-works/tls.html](site/how-it-works/tls.html) shows the whole flow; working on the code itself is in [CONTRIBUTING.md](CONTRIBUTING.md).
+## Start here
+
+| You want to | Do this |
+|---|---|
+| See it work, nothing to install but Docker | `docker build -t pqc https://github.com/QubitMan-hub/PQC.git#main` then `docker run --rm pqc` |
+| Learn it step by step on your computer | Open [site/manual.html](site/manual.html) in a browser: install, your own CA, a protected connection, mutual TLS, revoking a client, your application behind the edge |
+| Understand the idea | Open [site/how-it-works/tls.html](site/how-it-works/tls.html), the interactive diagram, or [site/index.html](site/index.html) |
+| Look up a command | `pqc COMMAND --help`, or the sections below |
+
+Working on the code itself is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Try it in one minute
 
@@ -39,7 +48,7 @@ The CA works everywhere. The TLS edge needs **OpenSSL 3.5 or newer**:
 |---|---|
 | Debian 13, Ubuntu 25.04+ | Already the system OpenSSL |
 | Docker | `docker build -t pqc .` then `docker run --rm pqc` (Debian 13 base) |
-| Windows | Install OpenSSL 3.5+ and put its `bin` on `PATH`, or set `PQC_OPENSSL` to that folder |
+| Windows | Install the 64-bit OpenSSL 3.5+ build for Windows, then in PowerShell `$env:PQC_OPENSSL = "C:\Program Files\OpenSSL-Win64\bin"` (the folder holding `libssl-3-x64.dll`) |
 | macOS | `brew install openssl@3`, then set `PQC_OPENSSL` to `$(brew --prefix openssl@3)/lib` if it is not found |
 | Older Linux | Build OpenSSL 3.5 and run with `LD_LIBRARY_PATH=/path/to/openssl/lib` |
 
