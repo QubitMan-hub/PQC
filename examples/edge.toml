@@ -1,0 +1,37 @@
+# Two routes in one process: each [[edge]] table is one route, a port the edge listens on and where its traffic goes.
+# Start with: pqc tls edge --config edge.toml
+
+[metrics]
+listen = "127.0.0.1:9100"          # /healthz, /metrics (Prometheus), /status (JSON)
+
+# Put post-quantum TLS in front of an existing web app. Clients must present a certificate from our CA.
+[[edge]]
+name = "web"
+mode = "terminate"
+listen = "0.0.0.0:8443"
+target = "127.0.0.1:8080"
+policy = "strict"                   # "transition" also accepts classical clients while you migrate
+cert = "pki/issued/edge/chain.pem"
+key = "pki/issued/edge/key.pem"
+key_passphrase_env = "EDGE_KEY_PASSPHRASE"
+ca = "pki/ca.crt"
+require_client_cert = true
+crl = "pki/crl.pem"
+# On a machine other than the CA's, fetch the CRL instead of copying it: `pqc ca publish` serves it, and a revocation
+# reaches this edge within crl_every seconds. Only a CRL the CA signed, not expired and not older than the copy is kept.
+# crl_url = "http://ca.internal:8080/crl.pem"
+# crl_every = 60
+proxy_protocol = false              # true: tell the upstream the real client address (nginx, HAProxy)
+max_connections = 512
+idle_timeout = 3600                  # seconds without traffic before a connection is closed
+
+# Let a legacy client on this machine reach a remote edge over post-quantum TLS.
+[[edge]]
+name = "to-datacenter"
+mode = "originate"
+listen = "127.0.0.1:5432"
+target = "db.example.com:8443"
+server_name = "db.example.com"
+ca = "pki/ca.crt"
+cert = "pki/issued/branch/chain.pem"
+key = "pki/issued/branch/key.pem"

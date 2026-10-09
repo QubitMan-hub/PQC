@@ -1,0 +1,163 @@
+{{- if .Values.ca.enabled }}
+{{- $host := include "pqc.caHost" . }}
+{{- $acmeUrl := .Values.ca.acme.baseUrl | default (printf "http://%s:%d" $host (int .Values.ca.acme.port)) }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ca
+  labels: {{- include "pqc.labels" . | nindent 4 }}
+spec:
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: ca
+  ports:
+    - name: crl
+      port: {{ .Values.ca.crl.port }}
+    {{- if .Values.ca.est.enabled }}
+    - name: est
+      port: {{ .Values.ca.est.port }}
+    {{- end }}
+    {{- if .Values.ca.acme.enabled }}
+    - name: acme
+      port: {{ .Values.ca.acme.port }}
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ .Release.Name }}-ca
+  labels: {{- include "pqc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ca
+spec:
+  replicas: 1                  # one writer: the CA folder is the source of truth
+  serviceName: {{ .Release.Name }}-ca
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ca
+  template:
+    metadata:
+      labels: {{- include "pqc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: ca
+    spec:
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: init
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["sh", "-ec"]
+          args:
+            - |
+              mkdir -p /data/root /data/pki /data/est /data/issued
+              if [ ! -f /data/pki/ca.crt ]; then
+              {{- if .Values.ca.issuingSecret }}
+                cp -L /issuing/* /data/pki/ && chmod 600 /data/pki/ca.key
+                pqc ca list --dir /data/pki > /dev/null
+              {{- else }}
+                PQC_CA_PASSPHRASE="$ROOT_PASSPHRASE" pqc ca init --dir /data/root --name "$CA_NAME" --algorithm {{ .Values.ca.algorithm }}
+                PQC_PARENT_CA_PASSPHRASE="$ROOT_PASSPHRASE" pqc ca init --dir /data/pki --name "$CA_NAME Issuing" --parent /data/root --algorithm {{ .Values.ca.algorithm }}
+              {{- end }}
+              fi
+              {{- if .Values.ca.est.enabled }}
+              test -f /data/est/chain.pem || pqc ca issue --dir /data/pki server {{ $host }} --san {{ .Release.Name }}-ca --out /data/est
+              {{- end }}
+              test -f /data/pki/crl.pem || pqc ca crl --dir /data/pki
+          env:
+            - name: CA_NAME
+              value: {{ .Values.ca.name | quote }}
+            {{- include "pqc.caEnv" . | nindent 12 }}
+            {{- if not .Values.ca.issuingSecret }}
+            - name: ROOT_PASSPHRASE
+              valueFrom:
+                secretKeyRef: {name: {{ .Release.Name }}-ca-root-passphrase, key: passphrase}
+            {{- end }}
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            {{- if .Values.ca.issuingSecret }}
+            - {name: issuing, mountPath: /issuing, readOnly: true}
+            {{- end }}
+      containers:
+        - name: crl
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          args: ["ca", "publish", "--dir", "/data/pki", "--listen", "0.0.0.0:{{ .Values.ca.crl.port }}"]
+          ports:
+            - {name: crl, containerPort: {{ .Values.ca.crl.port }}}
+          readinessProbe:
+            httpGet: {path: /crl.pem, port: crl}
+          volumeMounts:
+            {{- include "pqc.dataMount" (dict "dir" "pki" "ro" true) | nindent 12 }}
+          resources: {{- toYaml .Values.ca.resources | nindent 12 }}
+        {{- if .Values.ca.est.enabled }}
+        - name: est
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          args: ["ca", "serve", "--dir", "/data/pki", "--listen", "0.0.0.0:{{ .Values.ca.est.port }}", "--cert", "/data/est/chain.pem", "--key", "/data/est/key.pem"]
+          env: {{- include "pqc.caEnv" . | nindent 12 }}
+          ports:
+            - {name: est, containerPort: {{ .Values.ca.est.port }}}
+          readinessProbe:
+            tcpSocket: {port: est}
+          volumeMounts:
+            {{- include "pqc.dataMount" (dict "dir" "pki") | nindent 12 }}
+            {{- include "pqc.dataMount" (dict "dir" "est" "ro" true) | nindent 12 }}
+          resources: {{- toYaml .Values.ca.resources | nindent 12 }}
+        {{- end }}
+        {{- if .Values.ca.acme.enabled }}
+        - name: acme
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          args:
+            - ca
+            - acme
+            - --dir=/data/pki
+            - --listen=0.0.0.0:{{ .Values.ca.acme.port }}
+            - --base-url={{ $acmeUrl }}
+            - --http-port={{ .Values.ca.acme.httpPort }}
+            {{- if .Values.ca.acme.requireEab }}
+            - --require-eab
+            {{- end }}
+            {{- range .Values.ca.acme.allow }}
+            - --allow={{ . }}
+            {{- end }}
+          env: {{- include "pqc.caEnv" . | nindent 12 }}
+          ports:
+            - {name: acme, containerPort: {{ .Values.ca.acme.port }}}
+          readinessProbe:
+            httpGet: {path: /directory, port: acme}
+          volumeMounts:
+            {{- include "pqc.dataMount" (dict "dir" "pki") | nindent 12 }}
+          resources: {{- toYaml .Values.ca.resources | nindent 12 }}
+        {{- end }}
+        - name: maintain
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          command: ["sh", "-c"]
+          args:
+            - while true; do pqc ca maintain --dir /data/pki --renew-within {{ .Values.ca.maintain.renewWithinDays }} --crl-days {{ .Values.ca.maintain.crlDays }}; sleep {{ .Values.ca.maintain.everySeconds }}; done
+          env: {{- include "pqc.caEnv" . | nindent 12 }}
+          volumeMounts:
+            {{- include "pqc.dataMount" (dict "dir" "pki") | nindent 12 }}
+            {{- include "pqc.dataMount" (dict "dir" "issued") | nindent 12 }}
+      {{- if .Values.ca.issuingSecret }}
+      volumes:
+        - name: issuing
+          secret: {secretName: {{ .Values.ca.issuingSecret }}, defaultMode: 0400}
+      {{- end }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- if .Values.ca.storage.storageClass }}
+        storageClassName: {{ .Values.ca.storage.storageClass }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.ca.storage.size }}
+{{- end }}

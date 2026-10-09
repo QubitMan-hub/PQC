@@ -1,0 +1,19 @@
+{{- if .Values.ca.enabled }}
+CA: {{ .Release.Name }}-ca in {{ .Release.Namespace }} (key and index on the "data" volume).
+  Root certificate for your clients (the CA chain, for servers that check revocation: /data/pki/chain.pem):
+    kubectl -n {{ .Release.Namespace }} exec {{ .Release.Name }}-ca-0 -c maintain -- cat /data/pki/root.crt > ca.crt
+  {{- if .Values.ca.est.enabled }}
+  EST: https://{{ include "pqc.caHost" . }}:{{ .Values.ca.est.port }}/.well-known/est (post-quantum TLS)
+    token: kubectl -n {{ .Release.Namespace }} exec {{ .Release.Name }}-ca-0 -c maintain -- pqc ca token --dir /data/pki server NAME
+  {{- end }}
+  {{- if .Values.ca.acme.enabled }}
+  ACME: {{ .Values.ca.acme.baseUrl | default (printf "http://%s:%d" (include "pqc.caHost" .) (int .Values.ca.acme.port)) }}/directory
+    {{- if .Values.ca.acme.requireEab }}
+    EAB key: kubectl -n {{ .Release.Namespace }} exec {{ .Release.Name }}-ca-0 -c maintain -- pqc ca eab --dir /data/pki
+    {{- end }}
+  {{- end }}
+{{- end }}
+{{- if .Values.edge.enabled }}
+Edge: {{ .Release.Name }}-edge ({{ .Values.edge.policy }} policy), certificates from Secret {{ .Values.edge.certSecret }}.
+  Update the Secret to renew; edges reload certificates without a restart.
+{{- end }}

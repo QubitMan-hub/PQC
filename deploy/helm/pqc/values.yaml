@@ -1,0 +1,73 @@
+image:
+  repository: ghcr.io/qubitman-hub/pqc
+  tag: ""                      # defaults to the chart's appVersion
+  pullPolicy: IfNotPresent
+
+ca:
+  enabled: true
+  name: "Acme PQC Root"
+  algorithm: ML-DSA-87
+  # Secret with key "passphrase" for the issuing CA's key, which is always encrypted. Empty: the chart makes one with a
+  # random passphrase (<release>-ca-passphrase), kept on upgrade and uninstall.
+  passphraseSecret: ""
+  # The issuing CA that EST and ACME sign with. Empty: the chart creates a root and an issuing CA under it on
+  # first start; the root's key stays on the volume, mounted by no service, its passphrase in <release>-ca-root-passphrase.
+  # For production, make the issuing CA offline under a root that never touches the cluster:
+  #   pqc ca init --dir root --name "Acme Root"                       (offline, or --kms / --signer-command)
+  #   pqc ca init --dir issuing --name "Acme Issuing" --parent root
+  #   kubectl create secret generic acme-issuing --from-file=issuing/        (and put its passphrase in passphraseSecret)
+  # and name that Secret here.
+  issuingSecret: ""
+  storage:
+    size: 1Gi
+    storageClass: ""
+  est:
+    enabled: true
+    port: 8443
+  acme:
+    enabled: true
+    port: 14000
+    baseUrl: ""                # the URL clients use; default http://<release>-ca.<namespace>.svc:14000
+    allow: []                  # e.g. ["*.corp.example"]
+    requireEab: true
+    httpPort: 80
+  crl:
+    port: 8080                 # `ca publish`: crl.pem and ca.crt over HTTP; edges with requireClientCert follow it
+  maintain:
+    renewWithinDays: 30
+    crlDays: 7
+    everySeconds: 86400
+  resources: {}
+
+edge:
+  enabled: false
+  replicas: 2
+  # Where edges with requireClientCert fetch the CRL (every minute). Default: this release's CA; with ca.enabled false,
+  # set it to your CA's published crl.pem, or leave it empty and put crl.pem in the Secret.
+  crlUrl: ""
+  # Secret with chain.pem, key.pem and ca.crt (and crl.pem when requireClientCert and no CRL address). Create it with
+  #   pqc ca issue server <name> --out edge && kubectl create secret generic edge-tls --from-file=edge/ --from-file=pki/ca.crt
+  certSecret: edge-tls
+  preflight: true              # run `pqc doctor --config` first; a broken or unsafe edge.toml keeps the pod from starting
+  policy: strict               # strict, transition (also serves classical clients) or cnsa2
+  routes:
+    - name: web
+      port: 8443
+      target: "web:80"         # the service to protect, host:port
+      requireClientCert: false
+  service:
+    type: ClusterIP
+  metricsPort: 9100
+  resources: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  fsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]

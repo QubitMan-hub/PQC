@@ -1,0 +1,223 @@
+{
+ "schema_version": 2,
+ "diagram_type": "workflow",
+ "meta": {
+  "title": "TLS 1.3 + mTLS: a quantum-safe front door",
+  "quality_profile": "showcase",
+  "output": "site/how-it-works/tls.html",
+  "legend": {
+   "mode": "auto",
+   "entries": {
+    "frontend": {
+     "label": "Checks and measurements"
+    },
+    "backend": {
+     "label": "Protection that runs for you"
+    },
+    "security": {
+     "label": "Trust and identity"
+    },
+    "database": {
+     "label": "Your data"
+    },
+    "external": {
+     "label": "People and results"
+    },
+    "cloud": {
+     "label": "Your existing systems"
+    },
+    "messagebus": {
+     "label": "Files you hand over"
+    }
+   }
+  },
+  "viewBox": [
+   1057,
+   652
+  ]
+ },
+ "lanes": [
+  {
+   "id": "people",
+   "label": "Who connects"
+  },
+  {
+   "id": "edge",
+   "label": "The edge"
+  },
+  {
+   "id": "authority",
+   "label": "Your own authority"
+  },
+  {
+   "id": "refused",
+   "label": "Refused",
+   "variant": "exception"
+  }
+ ],
+ "phases": [
+  {
+   "id": "p1",
+   "label": "Arrive",
+   "fromCol": 0,
+   "toCol": 0,
+   "variant": "default"
+  },
+  {
+   "id": "p2",
+   "label": "Check and protect",
+   "fromCol": 1,
+   "toCol": 2,
+   "variant": "emphasis"
+  },
+  {
+   "id": "p3",
+   "label": "Deliver",
+   "fromCol": 3,
+   "toCol": 3,
+   "variant": "dashed"
+  }
+ ],
+ "mainPath": [
+  "client",
+  "edge",
+  "check",
+  "app"
+ ],
+ "nodes": [
+  {
+   "id": "client",
+   "lane": "people",
+   "col": 0,
+   "type": "external",
+   "label": "Customers and partners",
+   "sublabel": "browser or app",
+   "width": 156,
+   "icon": "person"
+  },
+  {
+   "id": "edge",
+   "lane": "edge",
+   "col": 1,
+   "type": "backend",
+   "label": "TLS edge",
+   "sublabel": "quantum-safe lock",
+   "width": 156
+  },
+  {
+   "id": "check",
+   "lane": "edge",
+   "col": 2,
+   "type": "security",
+   "label": "Who is this?",
+   "sublabel": "partners show a card",
+   "width": 156
+  },
+  {
+   "id": "app",
+   "lane": "people",
+   "col": 3,
+   "type": "cloud",
+   "label": "Your application",
+   "sublabel": "unchanged",
+   "width": 156
+  },
+  {
+   "id": "ca",
+   "lane": "authority",
+   "col": 1,
+   "type": "security",
+   "label": "Your authority",
+   "sublabel": "issues ID cards",
+   "width": 156
+  },
+  {
+   "id": "crl",
+   "lane": "authority",
+   "col": 2,
+   "type": "security",
+   "label": "Revoked list",
+   "sublabel": "stolen card? cut off",
+   "width": 156
+  },
+  {
+   "id": "old",
+   "lane": "refused",
+   "col": 2,
+   "type": "external",
+   "label": "Old or unknown client",
+   "sublabel": "turned away",
+   "width": 156,
+   "icon": "failure"
+  }
+ ],
+ "edges": [
+  {
+   "id": "client-edge",
+   "from": "client",
+   "to": "edge",
+   "variant": "emphasis",
+   "label": "connect"
+  },
+  {
+   "id": "edge-check",
+   "from": "edge",
+   "to": "check",
+   "variant": "emphasis"
+  },
+  {
+   "id": "check-app",
+   "from": "check",
+   "to": "app",
+   "variant": "emphasis",
+   "label": "safe traffic"
+  },
+  {
+   "id": "ca-edge",
+   "from": "ca",
+   "to": "edge",
+   "variant": "default",
+   "label": "certificate"
+  },
+  {
+   "id": "ca-crl",
+   "from": "ca",
+   "to": "crl",
+   "variant": "default",
+   "label": "publish"
+  },
+  {
+   "id": "crl-check",
+   "from": "crl",
+   "to": "check",
+   "variant": "default",
+   "label": "checked"
+  },
+  {
+   "id": "check-old",
+   "from": "check",
+   "to": "old",
+   "variant": "security",
+   "label": "refused",
+   "role": "error"
+  }
+ ],
+ "cards": [
+  {
+   "dot": "cyan",
+   "title": "In plain words",
+   "items": [
+    "The edge sits in front of a service and adds a post-quantum lock; the service itself does not change",
+    "Partners prove who they are with a certificate from your own authority"
+   ]
+  },
+  {
+   "dot": "rose",
+   "title": "Good to know",
+   "items": [
+    "A transition setting keeps older browsers working while the rest move to post-quantum",
+    "Certificates renew on their own before they expire"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,4 @@
+.venv
+.git
+pki
+**/__pycache__

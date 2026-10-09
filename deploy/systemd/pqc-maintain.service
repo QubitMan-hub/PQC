@@ -1,0 +1,11 @@
+[Unit]
+Description=pqc CA maintenance: renew expiring certificates, re-sign the CRL
+ConditionPathExists=/var/lib/pqc/pki/ca.crt
+
+[Service]
+Type=oneshot
+User=pqc
+EnvironmentFile=-/etc/pqc/ca.env
+ExecStart=/opt/pqc/bin/pqc ca maintain --dir /var/lib/pqc/pki
+NoNewPrivileges=yes
+PrivateTmp=yes

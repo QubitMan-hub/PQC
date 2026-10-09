@@ -1,0 +1,57 @@
+# The edge as a sidecar: the app listens on localhost:8080 only; the pod's port 8443 speaks post-quantum TLS
+# (X25519MLKEM768, ML-DSA certificate from the Secret, reloaded when the Secret changes).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-edge
+data:
+  edge.toml: |
+    [metrics]
+    listen = "0.0.0.0:9100"
+
+    [[edge]]
+    name = "api"
+    mode = "terminate"
+    listen = "0.0.0.0:8443"
+    target = "127.0.0.1:8080"
+    policy = "transition"
+    cert = "/etc/pqc/tls/chain.pem"
+    key = "/etc/pqc/tls/key.pem"
+    ca = "/etc/pqc/tls/ca.crt"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels: {app: api}
+  template:
+    metadata:
+      labels: {app: api}
+    spec:
+      containers:
+        - name: api
+          image: your-registry/api:latest   # must listen on 127.0.0.1:8080
+        - name: pqc-edge
+          image: ghcr.io/qubitman-hub/pqc:0.2.2
+          args: ["tls", "edge", "--config", "/etc/pqc/edge.toml"]
+          ports:
+            - {name: https, containerPort: 8443}
+            - {name: metrics, containerPort: 9100}
+          readinessProbe:
+            httpGet: {path: /healthz, port: metrics}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: edge-config, mountPath: /etc/pqc/edge.toml, subPath: edge.toml}
+            - {name: tls, mountPath: /etc/pqc/tls, readOnly: true}
+      volumes:
+        - name: edge-config
+          configMap: {name: api-edge}
+        - name: tls
+          secret: {secretName: api-tls}

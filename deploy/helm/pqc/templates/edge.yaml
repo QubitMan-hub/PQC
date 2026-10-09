@@ -1,0 +1,112 @@
+{{- if .Values.edge.enabled }}
+{{- $crlUrl := .Values.edge.crlUrl | default (ternary (printf "http://%s-ca.%s.svc:%v/crl.pem" .Release.Name .Release.Namespace .Values.ca.crl.port) "" .Values.ca.enabled) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-edge
+  labels: {{- include "pqc.labels" . | nindent 4 }}
+data:
+  edge.toml: |
+    [metrics]
+    listen = "0.0.0.0:{{ .Values.edge.metricsPort }}"
+    {{- range .Values.edge.routes }}
+
+    [[edge]]
+    name = {{ .name | quote }}
+    mode = "terminate"
+    listen = "0.0.0.0:{{ .port }}"
+    target = {{ .target | quote }}
+    policy = {{ $.Values.edge.policy | quote }}
+    cert = "/etc/pqc/tls/chain.pem"
+    key = "/etc/pqc/tls/key.pem"
+    ca = "/etc/pqc/tls/ca.crt"
+    {{- if .requireClientCert }}
+    require_client_cert = true
+    {{- if $crlUrl }}
+    crl = "/var/lib/pqc/crl.pem"
+    crl_url = {{ $crlUrl | quote }}
+    {{- else }}
+    crl = "/etc/pqc/tls/crl.pem"
+    {{- end }}
+    {{- end }}
+    {{- end }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-edge
+  labels: {{- include "pqc.labels" . | nindent 4 }}
+    app.kubernetes.io/component: edge
+spec:
+  replicas: {{ .Values.edge.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: edge
+  template:
+    metadata:
+      labels: {{- include "pqc.labels" . | nindent 8 }}
+        app.kubernetes.io/component: edge
+      annotations:
+        checksum/config: {{ toYaml .Values.edge | sha256sum | trunc 16 }}
+    spec:
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.edge.preflight }}
+      initContainers:
+        - name: preflight
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          args: ["doctor", "--config", "/etc/pqc/edge.toml"]
+          volumeMounts:
+            - {name: config, mountPath: /etc/pqc/edge.toml, subPath: edge.toml}
+            - {name: tls, mountPath: /etc/pqc/tls, readOnly: true}
+      {{- end }}
+      containers:
+        - name: edge
+          image: {{ include "pqc.image" . }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
+          args: ["tls", "edge", "--config", "/etc/pqc/edge.toml"]
+          ports:
+            {{- range .Values.edge.routes }}
+            - {name: {{ .name | trunc 15 | quote }}, containerPort: {{ .port }}}
+            {{- end }}
+            - {name: metrics, containerPort: {{ .Values.edge.metricsPort }}}
+          readinessProbe:
+            httpGet: {path: /healthz, port: metrics}
+          livenessProbe:
+            httpGet: {path: /healthz, port: metrics}
+            periodSeconds: 20
+          volumeMounts:
+            - {name: config, mountPath: /etc/pqc/edge.toml, subPath: edge.toml}
+            - {name: tls, mountPath: /etc/pqc/tls, readOnly: true}
+            - {name: state, mountPath: /var/lib/pqc}
+          resources: {{- toYaml .Values.edge.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: {{ .Release.Name }}-edge
+        - name: tls
+          secret:
+            secretName: {{ .Values.edge.certSecret }}
+            defaultMode: 0440
+        - name: state
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-edge
+  labels: {{- include "pqc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.edge.service.type }}
+  selector:
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: edge
+  ports:
+    {{- range .Values.edge.routes }}
+    - {name: {{ .name | trunc 15 | quote }}, port: {{ .port }}}
+    {{- end }}
+    - {name: metrics, port: {{ $.Values.edge.metricsPort }}}
+{{- end }}

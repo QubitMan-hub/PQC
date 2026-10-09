@@ -1,0 +1,68 @@
+name: ci
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[test,integration]"
+      - run: python -m pytest -q
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: OpenSSL 3.5+ from Homebrew, so the TLS tests run too
+        run: brew install openssl@3 && echo "PQC_OPENSSL=$(brew --prefix openssl@3)/lib" >> "$GITHUB_ENV"
+      - run: pip install -e ".[test,integration]" && pqc doctor && pqc try
+      - name: A second loopback address, as Linux has, for the per-host limit test
+        run: sudo ifconfig lo0 alias 127.0.0.2 up
+      - run: python -m pytest -q
+  tls:
+    runs-on: ubuntu-latest
+    container: python:3.13-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: pip install -e ".[test,integration]" && pqc doctor && pqc try
+      - run: python -m coverage run -m pytest -q
+      - run: |
+          python -m coverage report --skip-covered --sort=cover
+          echo "::notice title=Coverage::pqc/ line coverage $(python -m coverage report --format=total)%"
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.13"
+      - name: Known vulnerabilities in the runtime and optional dependencies
+        run: |
+          pip install pip-audit==2.10.1
+          pip-audit .
+          python -c 'import tomllib; from pathlib import Path; print("\n".join(tomllib.loads(Path("pyproject.toml").read_text())["project"]["optional-dependencies"]["kms"]))' > extras.txt
+          pip-audit -r extras.txt
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: pipx run ruff==0.14.0 check .
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t pqc:ci . && docker run --rm pqc:ci doctor && docker run --rm pqc:ci

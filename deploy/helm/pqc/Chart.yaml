@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pqc
+description: Post-quantum CA (EST and ACME enrollment, CRLs, renewal) and TLS 1.3 edge gateways with ML-KEM and ML-DSA
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
