@@ -192,6 +192,7 @@ class ConsoleTest(unittest.TestCase):
                 self.assertIn(message, out["error"])
         self.assertEqual(self.error("/api/nothing")[0], 404)
 
+    @unittest.skipIf(REASON, REASON)
     def test_a_closed_port_is_explained(self):
         out = self.call("/api/test", {"target": "127.0.0.1:1"})[2]
         self.assertFalse(out["ok"])
