@@ -53,6 +53,12 @@ PROTOTYPES = {
 }
 
 
+# Calls on the data path that never block (the sockets are non-blocking) and take microseconds. They keep the GIL:
+# releasing and re-taking it around each one costs more than the call once many connections share the process.
+# Handshakes and key operations still release it, so they run on several cores at once.
+KEEP_GIL = {"ERR_clear_error", "ERR_get_error", "SSL_read", "SSL_write", "SSL_pending", "SSL_get_error", "SSL_shutdown"}
+
+
 class TLSError(Exception):
     pass
 
@@ -104,8 +110,9 @@ class _Lib:
             raise OpenSSLUnavailable(f"this machine's {self.version} is too old: post-quantum TLS needs OpenSSL 3.5 or newer. {EASIEST}{hint}")
         ssl = _load("ssl")
         for lib_, table in ((crypto, PROTOTYPES["crypto"]), (ssl, PROTOTYPES["ssl"])):
+            held = ctypes.PyDLL(lib_._name, handle=lib_._handle)
             for name, args, res in table:
-                fn = getattr(lib_, name)
+                fn = getattr(held if name in KEEP_GIL else lib_, name)
                 fn.argtypes, fn.restype = args, res
                 setattr(self, name, fn)
 
@@ -309,7 +316,7 @@ class Connection:
         buf = ctypes.create_string_buffer(size)
         deadline = time.monotonic() + (self.timeout if timeout is None else timeout)
         n = self._io(lambda: lib().SSL_read(self.ssl, buf, size), "read", deadline, wait)
-        return None if n is None else buf.raw[:n]
+        return None if n is None else ctypes.string_at(buf, n)
 
     def sendall(self, data):
         for i in range(0, len(data), 1 << 20):

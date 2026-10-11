@@ -75,8 +75,18 @@ def client_context(ca=None, cert=None, key=None, policy_name="strict", key_passp
 
 def connect(host, port, ctx, server_name=None, timeout=10.0):
     """Open a verified TLS 1.3 connection; the certificate must match `server_name` (defaults to `host`)."""
-    sock = socket.create_connection((host, port), timeout=timeout)
+    sock = nodelay(socket.create_connection((host, port), timeout=timeout))
     return ctx.wrap(sock, server_name or host, timeout)
+
+
+def nodelay(sock):
+    """Send each write at once. With Nagle's algorithm on, a reply that follows a small unacknowledged write waits up to
+    40 ms for the peer's delayed ACK, which multiplies request/response latency (databases, Redis, APIs)."""
+    try:
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    except OSError:
+        pass  # not TCP (a Unix socket in tests), or already closed
+    return sock
 
 
 __all__ = ["Connection", "Context", "OpenSSLUnavailable", "POLICIES", "Policy", "TLSError", "client_context", "connect", "lib",

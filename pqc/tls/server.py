@@ -11,6 +11,7 @@ from cryptography import x509
 
 from .. import file_stamp
 from ..pki import CAError, check_revocation, shared
+from . import nodelay
 from .openssl import TLSError
 
 log = logging.getLogger("pqc.tls")
@@ -31,7 +32,14 @@ class Revocation:
             raise ValueError(f"no CRL at {crl_path}: write one with 'pqc ca crl' (every client would be refused without it)")
         with open(ca_path, "rb") as f:
             self.crl_path, self.cas = crl_path, x509.load_pem_x509_certificates(f.read())
-        self.stamp, self.data = None, None
+        self.stamp, self.data, self.swept = None, None, file_stamp(crl_path)
+
+    def changed_since_sweep(self):
+        m = file_stamp(self.crl_path)
+        if m == self.swept:
+            return False
+        self.swept = m
+        return True
 
     def check(self, serial, chain=()):
         """`chain` is the verified chain above the certificate, where an intermediate CA's certificate comes from."""
@@ -85,6 +93,7 @@ class Server:
         self.stats = Stats()
         self.stopping = threading.Event()
         self.threads = set()
+        self.live = {}  # connection -> (client certificate serial, chain above it), for closing revoked ones
         self.sock = socket.create_server(address, reuse_port=reuse_port, backlog=128)
         self.sock.settimeout(1.0)
         self.port = self.sock.getsockname()[1]
@@ -113,8 +122,10 @@ class Server:
             if time.monotonic() - last_watch > 5:
                 self.reload_if_changed()
                 last_watch = time.monotonic()
+            self.close_revoked()
             try:
                 sock, addr = self.sock.accept()
+                nodelay(sock)
             except (socket.timeout, TimeoutError):
                 continue
             except OSError as e:
@@ -139,6 +150,27 @@ class Server:
             with self.lock:
                 self.threads.add(t)
             t.start()
+
+    def close_revoked(self):
+        """When the CRL changes, close open connections whose client certificate it now revokes: a stolen device holding a
+        long-lived connection (a database pool, MQTT, a tunnel) is cut off within a second or two, not at its next reconnect."""
+        try:
+            if not (self.revocation and self.revocation.changed_since_sweep()):
+                return
+        except OSError:
+            return  # the CRL file is being replaced; the next pass sees it
+        with self.lock:
+            live = list(self.live.items())
+        for conn, (serial, chain) in live:
+            try:
+                self.revocation.check(serial, chain)
+            except (CAError, ValueError, OSError) as e:
+                log.warning("%s: closing %s, its certificate is no longer accepted: %s", self.name, conn.peer_name, e)
+                self.stats.add("revoked_closed")
+                try:
+                    conn.sock.shutdown(socket.SHUT_RDWR)
+                except OSError:
+                    pass
 
     def _admit(self, host):
         """Once half the connections are taken, a host with `per_host` handshakes still unfinished waits, so one machine
@@ -176,6 +208,10 @@ class Server:
             finally:
                 self._handshake_over(addr[0])
             info = conn.info()
+            if self.revocation and cert:
+                conn.peer_name = peer
+                with self.lock:
+                    self.live[conn] = (cert.serial_number, conn.peer_chain()[1:])
             self.stats.opened(info["group"])
             log.info("%s: %s %s %s %s peer=%s", self.name, peer, info["version"], info["group"], info["cipher"], info["peer"] or "-")
             try:
@@ -189,6 +225,8 @@ class Server:
                 self.stats.closed()
         finally:
             if conn:
+                with self.lock:
+                    self.live.pop(conn, None)
                 conn.close()
             else:
                 sock.close()

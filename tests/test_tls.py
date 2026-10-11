@@ -143,6 +143,25 @@ class TLSTest(unittest.TestCase):
         self.assertEqual(reply, b"")
         self.roundtrip(s.port, self.client(self.alice))
 
+    def test_revoking_a_client_closes_its_open_connection_and_no_other(self):
+        trudy, rec = self.ca.issue("trudy", "client")
+        s = self.server(mtls=True)
+        with tls.connect("127.0.0.1", s.port, self.client(trudy), "localhost", timeout=3) as t, \
+             tls.connect("127.0.0.1", s.port, self.client(self.alice), "localhost", timeout=3) as a:
+            t.sendall(b"ping")
+            self.assertEqual(t.recv(timeout=3), b"ping")
+            with self.assertLogs("pqc", "WARNING") as logs:
+                self.ca.revoke(rec.serial, "keyCompromise")
+                try:
+                    cut = t.recv(timeout=5) == b""
+                except (tls.TLSError, OSError):
+                    cut = True
+            self.assertTrue(cut, "a revoked client's open connection must be closed")
+            self.assertIn("no longer accepted", "".join(logs.output))
+            a.sendall(b"still here")
+            self.assertEqual(a.recv(timeout=3), b"still here")
+        self.assertEqual(s.stats.snapshot()["revoked_closed"], 1)
+
     def test_a_damaged_crl_refuses_everyone_and_says_why(self):
         crl = Path(self.tmp.name) / "damaged-crl.pem"
         crl.write_bytes(b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n")

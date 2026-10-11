@@ -150,7 +150,7 @@ class Edge:
     def _terminate(self, conn, addr):
         r = self.route
         try:
-            up = socket.create_connection(hostport(r.target), timeout=r.handshake_timeout)
+            up = tls.nodelay(socket.create_connection(hostport(r.target), timeout=r.handshake_timeout))
         except OSError as e:
             self.stats.add("upstream_failed")
             log.warning("%s: upstream %s unreachable: %s", r.name, r.target, explain(e))
@@ -197,6 +197,7 @@ class Edge:
         while True:
             try:
                 client, _ = self.listener.accept()
+                tls.nodelay(client)
             except OSError:
                 return
             if not slots.acquire(blocking=False):
