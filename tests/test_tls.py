@@ -162,6 +162,19 @@ class TLSTest(unittest.TestCase):
             self.assertEqual(a.recv(timeout=3), b"still here")
         self.assertEqual(s.stats.snapshot()["revoked_closed"], 1)
 
+    @unittest.skipIf(os.name == "nt", "Windows has no per-process limit on open sockets")
+    def test_the_open_file_limit_is_raised_and_a_shortfall_named(self):
+        import resource
+        from pqc.tls.server import open_files
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        self.addCleanup(resource.setrlimit, resource.RLIMIT_NOFILE, (soft, hard))
+        if hard != resource.RLIM_INFINITY and hard > 256:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (256, hard))
+            self.assertGreater(open_files(10), 256)
+        with self.assertLogs("pqc", "WARNING") as logs:
+            open_files(10 ** 12)
+        self.assertIn("LimitNOFILE", logs.output[0])
+
     def test_a_damaged_crl_refuses_everyone_and_says_why(self):
         crl = Path(self.tmp.name) / "damaged-crl.pem"
         crl.write_bytes(b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n")

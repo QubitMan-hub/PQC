@@ -106,6 +106,23 @@ class CATest(unittest.TestCase):
         with self.assertRaisesRegex(CAError, "not signed"):
             check_revocation(cert.serial_number, other.crl(), self.ca.cert)
 
+    def test_a_checked_crl_is_remembered_but_still_expires_and_still_refuses_forgeries(self):
+        from unittest import mock
+        import pqc.pki as pki
+        crl = self.ca.crl(days=1)
+        with mock.patch.object(pki, "signed_by", wraps=pki.signed_by) as verify:
+            for _ in range(5):
+                check_revocation(1, crl, self.ca.cert)
+        self.assertEqual(verify.call_count, 1, "an unchanged CRL's signature is checked once, not on every connection")
+        with mock.patch.object(pki, "now", return_value=pki.now() + dt.timedelta(days=2)), self.assertRaisesRegex(CAError, "expired"):
+            check_revocation(1, crl, self.ca.cert)
+        other = CA.init(Path(self.tmp.name) / "other", "Other")
+        with self.assertRaisesRegex(CAError, "not signed"):
+            check_revocation(1, crl, other.cert)
+        for damaged in (crl.replace(b"A", b"B", 1), b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n"):
+            with self.assertRaisesRegex(CAError, "damaged|not signed"):
+                check_revocation(1, damaged, self.ca.cert)
+
     def test_renew_keeps_names_with_a_new_key(self):
         out1, r1 = self.ca.issue("svc", "server", ["svc.local"])
         out2, r2 = self.ca.renew(r1.serial)

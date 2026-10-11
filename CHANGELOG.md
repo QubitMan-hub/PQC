@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Revocation lists are verified once per change instead of on every connection: with 20,000 revoked certificates a mutual-TLS handshake no longer spends 26 ms re-checking the list (35 handshakes a second before, 150 after, the same as with an empty list). A list with a damaged version field is now refused with a clear message instead of an unhandled error.
+- The edge raises its open-file limit at start (systemd's default of 1,024 allowed only about 340 connections) and warns when `max_connections` still cannot fit; each connection now holds two file descriptors instead of three. The systemd unit sets `LimitNOFILE=65536`. `--max-connections` sets the limit without a config file. Measured: 9,000 open connections in one process, about 105 KB each.
+- The refusal hint for clients without a matching key exchange names what the policy needs (cnsa2: ML-KEM-1024).
+- `tests/interop/bench.py` measures the edge on any machine; CI now runs the TLS tests on Windows with OpenSSL 3.5 instead of skipping them.
+
 - Revoking a client now also closes its open connections, within about a second of the CRL changing; before, only new connections were refused, so a stolen device holding a long-lived connection (a database pool, MQTT, a tunnel) stayed in until it reconnected.
 - The edge sends data without Nagle delays (TCP_NODELAY) and keeps the GIL on its short OpenSSL data-path calls: 40-55% more requests per second per process, and lower latency for request/response protocols.
 - `tests/interop`: Node and curl on OpenSSL 3.5 (ML-DSA, mutual TLS), Go (post-quantum key exchange with a classical fallback certificate) and revocation against a running edge, and pqc's client against public post-quantum servers; run by the new `interop` workflow.

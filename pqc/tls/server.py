@@ -20,8 +20,31 @@ log = logging.getLogger("pqc.tls")
 HINTS = {  # OpenSSL's words for the two ways a client without post-quantum support is refused
     "no shared signature algorithms": " (the client cannot verify ML-DSA certificates, as browsers today: use policy transition with a "
                                       "fallback certificate)",
-    "no suitable key share": " (the client offers no post-quantum key exchange: update it, or use policy transition)",
+    "no suitable key share": " (the client offers none of the key exchanges this policy allows: strict needs a post-quantum hybrid "
+                             "such as X25519MLKEM768, cnsa2 needs ML-KEM-1024; update the client, or use policy transition)",
 }
+
+
+def open_files(needed):
+    """Raise this process's open-file limit to its hard limit (systemd starts services with a soft limit of 1024, enough
+    for only about 500 connections), and warn when `needed` still does not fit. None where there is no such limit."""
+    try:
+        import resource
+    except ImportError:
+        return None  # Windows: no per-process descriptor limit for sockets
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    for target in (hard, 65536, 10240):  # macOS refuses an unlimited soft limit
+        if soft != resource.RLIM_INFINITY and (target == resource.RLIM_INFINITY or target > soft):
+            try:
+                resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+                soft = target
+                break
+            except (ValueError, OSError):
+                continue
+    if soft != resource.RLIM_INFINITY and needed > soft:
+        log.warning("this process may open only %d files but its connection limits need about %d (two per connection); "
+                    "raise LimitNOFILE (systemd) or ulimit -n, or lower max_connections", soft, needed)
+    return soft
 
 
 class Revocation:

@@ -6,7 +6,7 @@ originate  plain local clients -> edge -> PQC TLS remote (usually another edge i
 import json
 import logging
 import os
-import selectors
+import select
 import socket
 import subprocess
 import sys
@@ -74,24 +74,33 @@ def pump(conn, raw, idle_timeout):
     stops reading for a while (a slow link, a paused phone) gets the idle timeout too, not the short handshake deadline."""
     raw.settimeout(idle_timeout)
     conn.timeout = idle_timeout
-    with selectors.DefaultSelector() as sel:
-        sel.register(conn.sock, selectors.EVENT_READ, "tls")
-        sel.register(raw, selectors.EVENT_READ, "raw")
-        while True:
-            ready = {"tls"} if conn.pending() else {k.data for k, _ in sel.select(idle_timeout)}
-            if not ready:
-                raise TimeoutError(f"idle for {idle_timeout:g}s")
-            if "tls" in ready:
-                data = conn.recv(wait=False)
-                if data == b"":
-                    return
-                if data:
-                    raw.sendall(data)
-            if "raw" in ready:
-                data = raw.recv(65536)
-                if not data:
-                    return
-                conn.sendall(data)
+    wait = readable(conn.sock, raw)
+    while True:
+        ready = {conn.sock} if conn.pending() else wait(idle_timeout)
+        if not ready:
+            raise TimeoutError(f"idle for {idle_timeout:g}s")
+        if conn.sock in ready:
+            data = conn.recv(wait=False)
+            if data == b"":
+                return
+            if data:
+                raw.sendall(data)
+        if raw in ready:
+            data = raw.recv(65536)
+            if not data:
+                return
+            conn.sendall(data)
+
+
+def readable(*socks):
+    """A function returning which of `socks` are readable within a timeout. poll() where there is one: unlike a selector it
+    holds no file descriptor of its own, so a connection costs two, not three, of the process's open-file limit."""
+    if not hasattr(select, "poll"):
+        return lambda timeout: set(select.select(socks, [], [], timeout)[0])
+    p, by_fd = select.poll(), {s.fileno(): s for s in socks}
+    for s in socks:
+        p.register(s, select.POLLIN)
+    return lambda timeout: {by_fd[fd] for fd, _ in p.poll(timeout * 1000)}
 
 
 def proxy_header(client, local):
