@@ -10,11 +10,13 @@ import os
 import platform
 import re
 import select
+import tempfile
 import time
 from pathlib import Path
 
 MIN_VERSION = 0x30500000
 TLS1_3_VERSION = 0x0304
+CTRL_MODE, MODE_NO_AUTO_CHAIN = 33, 0x8
 CTRL_SET_GROUPS_LIST, CTRL_SET_SIGALGS_LIST, CTRL_SET_TLSEXT_HOSTNAME = 92, 98, 55
 CTRL_SET_MIN_PROTO_VERSION, CTRL_SET_MAX_PROTO_VERSION = 123, 124
 VERIFY_NONE, VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT = 0, 1, 2
@@ -61,6 +63,15 @@ PROTOTYPES = {
 # releasing and re-taking it around each one costs more than the call once many connections share the process.
 # Handshakes and key operations still release it, so they run on several cores at once.
 KEEP_GIL = {"ERR_clear_error", "ERR_get_error", "SSL_read", "SSL_write", "SSL_pending", "SSL_get_error", "SSL_shutdown"}
+
+
+def _self_signed(pem):
+    from cryptography import x509
+    try:
+        c = x509.load_pem_x509_certificate(pem)
+    except ValueError:
+        return False
+    return c.subject == c.issuer
 
 
 class TLSError(Exception):
@@ -188,11 +199,13 @@ class Context:
             if ciphersuites:
                 self._check(L_.SSL_CTX_set_ciphersuites(self.ptr, ciphersuites.encode()), f"use cipher suites {ciphersuites}")
             if cert:
-                self._check(L_.SSL_CTX_use_certificate_chain_file(self.ptr, os.fsencode(cert)), f"load certificate {cert}")
+                self._use_chain(cert)
+                # send the chain as given: with a CA file loaded, OpenSSL would otherwise rebuild it and add the root back
+                L_.SSL_CTX_ctrl(self.ptr, CTRL_MODE, MODE_NO_AUTO_CHAIN, None)
             if key:
                 self._use_key(key, key_passphrase)
             if fallback:
-                self._check(L_.SSL_CTX_use_certificate_chain_file(self.ptr, os.fsencode(fallback[0])), f"load certificate {fallback[0]}")
+                self._use_chain(fallback[0])
                 self._use_key(fallback[1], fallback[2] if len(fallback) > 2 else None)
             if ca:
                 self._check(L_.SSL_CTX_load_verify_locations(self.ptr, os.fsencode(ca), None), f"load CA {ca}")
@@ -216,6 +229,26 @@ class Context:
     def _check(self, result, what):
         if result != 1:
             raise TLSError(f"cannot {what}: {errors('not supported by this OpenSSL')}")
+
+    def _use_chain(self, path):
+        """Load a certificate chain, leaving out a self-signed root after the first certificate: the peer has the root
+        already, and an ML-DSA root is 7 KB that pushes the handshake past TCP's initial window, an extra round trip on
+        every new connection. The file itself is not changed."""
+        load = lambda p: self._check(lib().SSL_CTX_use_certificate_chain_file(self.ptr, os.fsencode(p)), f"load certificate {path}")
+        try:
+            blocks = re.findall(rb"-----BEGIN CERTIFICATE-----.+?-----END CERTIFICATE-----\s*", Path(path).read_bytes(), re.S)
+        except OSError:
+            return load(path)  # OpenSSL's error names the problem
+        keep = blocks[:1] + [b for b in blocks[1:] if not _self_signed(b)]
+        if len(keep) == len(blocks):
+            return load(path)
+        fd, tmp = tempfile.mkstemp(suffix=".pem")
+        try:
+            os.write(fd, b"".join(keep))
+            os.close(fd)
+            load(tmp)
+        finally:
+            os.unlink(tmp)
 
     def _use_key(self, path, passphrase):
         L_ = lib()

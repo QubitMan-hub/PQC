@@ -241,6 +241,40 @@ class TLSTest(unittest.TestCase):
             c.sendall(b"six")
             self.assertEqual((c.recv(timeout=3), c.group), (b"six", "X25519MLKEM768"))
 
+    def test_the_root_is_not_sent_so_the_first_flight_fits_tcps_initial_window(self):
+        s = self.server()
+        relay, counted = socket.create_server(("127.0.0.1", 0)), []
+
+        def forward():
+            client, _ = relay.accept()
+            server = socket.create_connection(("127.0.0.1", s.port))
+            client.settimeout(3)
+            server.settimeout(0.5)
+            got = 0
+            for _ in range(20):
+                try:
+                    data = client.recv(65536)
+                    server.sendall(data)
+                except (TimeoutError, OSError):
+                    pass
+                try:
+                    data = server.recv(65536)
+                    got += len(data)
+                    client.sendall(data)
+                except (TimeoutError, OSError):
+                    pass
+            counted.append(got)
+            client.close()
+            server.close()
+        t = threading.Thread(target=forward)
+        t.start()
+        with tls.connect("127.0.0.1", relay.getsockname()[1], self.client(), "localhost", timeout=5) as c:
+            self.assertEqual(len(c.peer_chain()), 2, "the client still verifies up to the root it trusts")
+        t.join()
+        relay.close()
+        self.assertLess(counted[0], 14600, "about 10 TCP segments: more costs a round trip on every new connection")
+        self.assertEqual((self.srv / "chain.pem").read_bytes().count(b"BEGIN CERTIFICATE"), 2, "the file keeps the root")
+
     def test_a_damaged_crl_refuses_everyone_and_says_why(self):
         crl = Path(self.tmp.name) / "damaged-crl.pem"
         crl.write_bytes(b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n")

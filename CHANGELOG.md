@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The edge and clients no longer send the self-signed root in their certificate chain (the peer already has it): the edge's first handshake reply shrinks from 19 KB to 12 KB, inside TCP's initial window, which saves a round trip on every new connection over a real network. OpenSSL's automatic chain building, which put the root back when a client-CA file was loaded, is off; chain files on disk are unchanged.
+
 - On Windows, connecting to `localhost` took two seconds when the server listened on 127.0.0.1 (Windows tries ::1 first and waits after the refusal). pqc's client now tries 127.0.0.1 first for `localhost`, and the edge, `ca serve` and ACME listen on every interface for both IPv4 and IPv6 by default (`[::]`), falling back to IPv4 where there is no IPv6.
 
 - The edge, the console, ACME and the metrics page can listen on IPv6 (`--listen "[::]:443"` also takes IPv4 clients where the system allows); they failed with "address family not supported" before.
