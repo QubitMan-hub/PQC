@@ -21,7 +21,7 @@ import socket
 import ssl
 import threading
 import urllib.request
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
 from cryptography import x509
@@ -520,8 +520,8 @@ def serve(service, listen, tls_cert=None, tls_key=None):
         def log_message(self, fmt, *args):
             log.debug(fmt, *args)
 
-    from ..tls import hostport
-    httpd = ThreadingHTTPServer(hostport(listen, "127.0.0.1"), Handler)
+    from ..tls import http_server
+    httpd = http_server(listen, Handler)
     httpd.service = service
     if tls_cert:
         ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)

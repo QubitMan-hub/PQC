@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- The edge, the console, ACME and the metrics page can listen on IPv6 (`--listen "[::]:443"` also takes IPv4 clients where the system allows); they failed with "address family not supported" before.
+
 - Mutual-TLS edges failed every resumed session ("session id context uninitialized"), and TLS clients resume automatically when they reconnect. Sessions now resume, a session from an edge that trusts other clients or another policy never does, and a revoked client is still refused when it resumes.
 
 - Facing the internet: one address may open at most 50 new connections a second (`max_rate_per_client`; bursts of twice that; this machine's own connections are exempt) and, once the edge is half full, hold at most an eighth of its connections (`max_per_client`). Before, one machine could take every connection slot by completing handshakes and then idling, or slow everyone else's new connections from 4 ms to 180 ms by reconnecting as fast as it could. Refusals and failed handshakes are logged once per address every 10 seconds, so a flood cannot fill the disk. The accept backlog is 1,024 (was 128).

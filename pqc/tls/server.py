@@ -13,7 +13,7 @@ from cryptography import x509
 
 from .. import file_stamp
 from ..pki import CAError, check_revocation, shared
-from . import nodelay
+from . import listen, nodelay
 from .openssl import TLSError
 
 log = logging.getLogger("pqc.tls")
@@ -131,7 +131,7 @@ class Server:
         self.stopping = threading.Event()
         self.threads = set()
         self.live = {}  # connection -> (client certificate serial, chain above it), for closing revoked ones
-        self.sock = socket.create_server(address, reuse_port=reuse_port, backlog=1024)
+        self.sock = listen(address, reuse_port=reuse_port)
         self.sock.settimeout(1.0)
         self.port = self.sock.getsockname()[1]
 

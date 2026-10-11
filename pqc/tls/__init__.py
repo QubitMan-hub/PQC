@@ -93,6 +93,23 @@ __all__ = ["Connection", "Context", "OpenSSLUnavailable", "POLICIES", "Policy", 
            "server_context"]
 
 
+def listen(address, backlog=1024, reuse_port=False):
+    """A listening socket for (host, port). An IPv6 host gets an IPv6 socket; "::" also takes IPv4 clients where the system
+    allows one socket for both."""
+    if ":" not in address[0]:
+        return socket.create_server(address, backlog=backlog, reuse_port=reuse_port)
+    return socket.create_server(address, family=socket.AF_INET6, backlog=backlog, reuse_port=reuse_port,
+                                dualstack_ipv6=address[0] == "::" and socket.has_dualstack_ipv6())
+
+
+def http_server(listen_on, handler):
+    """A ThreadingHTTPServer on "host:port" (default host 127.0.0.1), IPv6 when the host is."""
+    from http.server import ThreadingHTTPServer
+    address = hostport(listen_on, "127.0.0.1")
+    cls = type("HTTPServer6", (ThreadingHTTPServer,), {"address_family": socket.AF_INET6}) if ":" in address[0] else ThreadingHTTPServer
+    return cls(address, handler)
+
+
 def hostport(s, default_host="0.0.0.0"):
     host, _, port = s.rpartition(":")
     if not (port.isascii() and port.isdigit() and int(port) <= 65535):

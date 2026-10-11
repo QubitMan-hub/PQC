@@ -140,7 +140,7 @@ class Edge:
             self.watch = [p for p in (r.ca, r.cert, r.key) if p]
             self.stamps = [file_stamp(p) for p in self.watch]
             self.ctx = tls.client_context(r.ca, r.cert or None, r.key or None, r.policy, r.passphrase())
-            self.listener = socket.create_server(hostport(r.listen, "127.0.0.1"), backlog=128, reuse_port=reuse_port)
+            self.listener = tls.listen(hostport(r.listen, "127.0.0.1"), reuse_port=reuse_port)
             self.port = self.listener.getsockname()[1]
             log.info("%s: listening on %s, tunnelling to %s", r.name, r.listen, r.target)
         return self

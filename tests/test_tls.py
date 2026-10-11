@@ -228,6 +228,19 @@ class TLSTest(unittest.TestCase):
             reply = b""
         self.assertEqual(reply, b"", "a revoked client cannot get back in by resuming")
 
+    def test_ipv6_listen_and_connect(self):
+        try:
+            socket.create_server(("::1", 0), family=socket.AF_INET6).close()
+        except OSError:
+            self.skipTest("no IPv6 on this machine")
+        srv6, _ = self.ca.issue("v6", "server", ["::1"])
+        s = Server(tls.hostport("[::1]:0"), lambda: tls.server_context(srv6 / "chain.pem", srv6 / "key.pem"), echo, handshake_timeout=3)
+        s.start()
+        self.addCleanup(s.stop, 1)
+        with tls.connect("::1", s.port, self.client(), timeout=3) as c:
+            c.sendall(b"six")
+            self.assertEqual((c.recv(timeout=3), c.group), (b"six", "X25519MLKEM768"))
+
     def test_a_damaged_crl_refuses_everyone_and_says_why(self):
         crl = Path(self.tmp.name) / "damaged-crl.pem"
         crl.write_bytes(b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n")

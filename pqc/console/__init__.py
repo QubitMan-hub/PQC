@@ -20,7 +20,7 @@ import urllib.request
 import zipfile
 from collections import deque
 from dataclasses import dataclass, field
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from importlib import resources
 from pathlib import Path
 
@@ -430,4 +430,4 @@ def serve(app):
                 return self.reply(status, out.data, "application/zip", [("Content-Disposition", f'attachment; filename="{out.name}"')])
             self.reply(status, out)
 
-    return ThreadingHTTPServer(tls.hostport(app.s.listen, "127.0.0.1"), Console)
+    return tls.http_server(app.s.listen, Console)

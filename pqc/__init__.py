@@ -101,9 +101,9 @@ METRICS, JSON, PEM = "text/plain; version=0.0.4; charset=utf-8", "application/js
 def serve_http(address, routes):
     """Answers GET on a background thread. `routes` maps a path to (content type, function returning the body as text, or
     None for 404); /healthz always answers ok."""
-    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    from http.server import BaseHTTPRequestHandler
 
-    from .tls import hostport
+    from .tls import http_server
     routes = {"/healthz": ("text/plain; charset=utf-8", lambda: "ok\n"), **routes}
 
     class Handler(BaseHTTPRequestHandler):
@@ -125,7 +125,7 @@ def serve_http(address, routes):
         def log_message(self, *args):
             pass
 
-    httpd = ThreadingHTTPServer(hostport(address, "127.0.0.1"), Handler)
+    httpd = http_server(address, Handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd
 
