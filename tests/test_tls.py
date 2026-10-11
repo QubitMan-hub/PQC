@@ -175,6 +175,24 @@ class TLSTest(unittest.TestCase):
             open_files(10 ** 12)
         self.assertIn("LimitNOFILE", logs.output[0])
 
+    def test_one_address_cannot_take_the_cpu_or_the_slots_and_floods_are_not_logged_line_by_line(self):
+        s = Server(("127.0.0.1", 0), lambda: tls.server_context(self.srv / "chain.pem", self.srv / "key.pem", key_passphrase=b"server-pass"),
+                   echo, max_connections=64, max_rate_per_client=5)
+        self.addCleanup(s.sock.close)
+        verdicts = [s._admit("203.0.113.5") for _ in range(30)]
+        self.assertEqual(verdicts[:10], [None] * 10, "a burst of twice the rate is allowed")
+        self.assertIn("max_rate_per_client", verdicts[-1])
+        self.assertIsNone(s._admit("198.51.100.7"), "another address is not affected")
+        self.assertTrue(all(s._admit("127.0.0.1") is None for _ in range(30)), "this machine is not rate-limited")
+        s.rate = 0
+        s.threads, s.open["192.0.2.9"] = set(range(32)), s.per_client
+        self.assertIn("max_per_client", s._admit("192.0.2.9"))
+        self.assertIsNone(s._admit("192.0.2.10"))
+        with self.assertLogs("pqc", "WARNING") as logs:
+            for _ in range(200):
+                s._refuse("203.0.113.5", "it opens more than 5 connections a second")
+        self.assertEqual(len(logs.output), 1)
+
     def test_a_damaged_crl_refuses_everyone_and_says_why(self):
         crl = Path(self.tmp.name) / "damaged-crl.pem"
         crl.write_bytes(b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n")

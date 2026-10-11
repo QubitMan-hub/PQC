@@ -72,6 +72,9 @@ def main():
             print(f"{tls.lib().version}, Python {sys.version.split()[0]} on {sys.platform}")
             print(f"new connections (X25519MLKEM768 + ML-DSA-65): {run(seconds, ctx, 18555, True):6.0f} per second")
             print(f"requests on kept-alive connections:           {run(seconds, ctx, 18555, False):6.0f} per second")
+            t = time.monotonic()
+            tls.connect("localhost", 18555, ctx, "localhost", 10).close()
+            print(f"one connection to 'localhost' (edge on 127.0.0.1): {(time.monotonic() - t) * 1000:5.0f} ms")
         finally:
             edge.terminate()
             web.shutdown()

@@ -63,7 +63,8 @@ def cmd_edge(a):
         routes = [Route(name="edge", mode=a.mode, listen=a.listen, target=a.target, policy=a.policy, cert=a.cert or "", key=a.key or "",
                         key_passphrase_env=a.key_passphrase_env or "", ca=a.ca or "", require_client_cert=a.require_client_cert,
                         crl=a.crl or "", crl_url=a.crl_url or "", server_name=a.server_name or "", proxy_protocol=a.proxy_protocol,
-                        fallback_cert=a.fallback_cert or "", fallback_key=a.fallback_key or "", max_connections=a.max_connections)]
+                        fallback_cert=a.fallback_cert or "", fallback_key=a.fallback_key or "", max_connections=a.max_connections,
+                        max_per_client=a.max_per_client, max_rate_per_client=a.max_rate_per_client)]
         metrics = a.metrics
     if a.workers < 1:
         raise ValueError("--workers must be 1 or more")
@@ -128,6 +129,11 @@ def add(sub):
     p.add_argument("--require-client-cert", action="store_true", help="mutual TLS")
     p.add_argument("--proxy-protocol", action="store_true", help="send a PROXY v1 header so the upstream sees the client address")
     p.add_argument("--max-connections", type=int, default=512, help="open connections per route before new ones are refused (default 512)")
+    p.add_argument("--max-per-client", type=int, default=0,
+                   help="once the edge is half full, connections one address may hold (default: an eighth of --max-connections)")
+    p.add_argument("--max-rate-per-client", type=float, default=50.0,
+                   help="new connections a second one address may open (default 50, bursts of twice that); 0: no limit, "
+                        "for an edge behind a load balancer, where every client has the balancer's address")
     p.add_argument("--workers", type=int, default=1, help="processes sharing the listen ports, e.g. one per CPU core (Linux)")
     from ..tls.bundles import SERVICES
     p = t.add_parser("bundle", help="nginx, postgres, pgvector or mqtt behind the edge, with certificates and a compose file")

@@ -23,6 +23,8 @@ crl = "pki/crl.pem"
 # crl_every = 60
 proxy_protocol = false              # true: tell the upstream the real client address (nginx, HAProxy)
 max_connections = 512
+# max_rate_per_client = 50          # new connections a second from one address (0: none, behind a load balancer)
+# max_per_client = 64              # once half full, connections one address may hold (default: max_connections / 8)
 idle_timeout = 3600                  # seconds without traffic before a connection is closed
 
 # Let a legacy client on this machine reach a remote edge over post-quantum TLS.

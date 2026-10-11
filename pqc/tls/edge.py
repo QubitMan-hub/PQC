@@ -16,7 +16,7 @@ from dataclasses import dataclass
 
 from .. import JSON, METRICS, build, env_passphrase, explain, file_stamp, read_toml, serve_http, tls
 from . import hostport
-from .server import Server, Stats
+from .server import Server, Stats, is_loopback
 
 log = logging.getLogger("pqc.edge")
 
@@ -39,6 +39,8 @@ class Route:
     server_name: str = ""
     proxy_protocol: bool = False
     max_connections: int = 512
+    max_per_client: int = 0  # 0: an eighth of max_connections, at least 16
+    max_rate_per_client: float = 50.0  # new connections a second from one address; 0: no limit (behind a load balancer)
     idle_timeout: float = 3600.0
     handshake_timeout: float = 10.0
     fallback_cert: str = ""
@@ -126,7 +128,7 @@ class Edge:
             make = lambda: tls.server_context(r.cert, r.key, r.ca or None, r.require_client_cert, r.policy, r.passphrase(), fallback=fallback)
             try:
                 self.server = Server(hostport(r.listen), make, self._terminate, watch=[r.cert, r.key, r.ca, r.fallback_cert, r.fallback_key],
-                                     crl=r.crl or None, ca=r.ca or None, max_connections=r.max_connections,
+                                     crl=r.crl or None, ca=r.ca or None, max_connections=r.max_connections, max_per_client=r.max_per_client, max_rate_per_client=r.max_rate_per_client,
                                      handshake_timeout=r.handshake_timeout, name=r.name, reuse_port=reuse_port)
             except BaseException:
                 if self.crl_follow:
@@ -358,4 +360,8 @@ def serve_metrics(address, edges, workers=None):
                                                 "policy": e.route.policy, **totals(e, workers)} for e in edges})
     httpd = serve_http(address, {"/metrics": (METRICS, lambda: metrics_text(edges, workers)), "/status": (JSON, status)})
     log.info("metrics on http://%s:%d/metrics", *httpd.server_address[:2])
+    if not is_loopback(httpd.server_address[0]):
+        log.warning("metrics on %s are plain HTTP without a login and list every route and upstream address: keep that port "
+                    "off the internet (firewall it, or listen on 127.0.0.1 and let Prometheus reach it over a private network)",
+                    address)
     return httpd

@@ -191,6 +191,7 @@ pqc ca revoke SERIAL --reason keyCompromise</pre>
         <li><b>Once a day:</b> <code>pqc ca maintain</code> renews certificates that expire within 30 days and re-signs the revocation list. An expired list refuses everyone, on purpose. Schedule it with Task Scheduler on Windows or cron elsewhere.</li>
         <li><b>Several routes, one file:</b> <code>examples/edge.toml</code> shows every setting; run it with <code>pqc tls edge --config edge.toml</code>. Changes load without a restart.</li>
         <li><b>CA on another machine:</b> <code>pqc ca publish</code> serves the revocation list, and <code>crl_url</code> in the edge's file fetches it every minute.</li>
+        <li><b>On the internet:</b> the edge limits each address to 50 new connections a second and, when busy, an eighth of its connection slots. Behind a load balancer, set <code>max_rate_per_client = 0</code> in the edge's file. Keep the <code>--metrics</code> port on <code>127.0.0.1</code> or behind a firewall.</li>
         <li><b>Before going live:</b> <code>pqc doctor --ca pki --config edge.toml</code> checks key protection, revocation list freshness, expiring certificates and risky settings.</li>
       </ul>
     </div>

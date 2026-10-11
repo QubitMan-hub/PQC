@@ -1,7 +1,9 @@
 """A threaded PQC TLS 1.3 server: connection limits, handshake timeouts, CRL checks, certificate hot-reload and stats."""
+import ipaddress
 import logging
 import os
 import socket
+import sys
 import threading
 import time
 from collections import Counter
@@ -33,7 +35,9 @@ def open_files(needed):
     except ImportError:
         return None  # Windows: no per-process descriptor limit for sockets
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-    for target in (hard, 65536, 10240):  # macOS refuses an unlimited soft limit
+    for target in (hard, 65536, 10240):
+        if target == resource.RLIM_INFINITY and sys.platform == "darwin":
+            continue  # macOS accepts "unlimited" but its kernel caps descriptors far lower, silently
         if soft != resource.RLIM_INFINITY and (target == resource.RLIM_INFINITY or target > soft):
             try:
                 resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
@@ -45,6 +49,14 @@ def open_files(needed):
         log.warning("this process may open only %d files but its connection limits need about %d (two per connection); "
                     "raise LimitNOFILE (systemd) or ulimit -n, or lower max_connections", soft, needed)
     return soft
+
+
+def is_loopback(host):
+    """Connections from this machine (a sidecar, a health check, a local tunnel) are not rate-limited."""
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 class Revocation:
@@ -104,20 +116,22 @@ class Server:
     """
 
     def __init__(self, address, make_context, handler, watch=(), crl=None, ca=None, max_connections=512,
-                 handshake_timeout=10.0, name="tls", reuse_port=False):
+                 handshake_timeout=10.0, name="tls", reuse_port=False, max_per_client=0, max_rate_per_client=50.0):
         self.address, self.make_context, self.handler, self.name = address, make_context, handler, name
         self.ctx = make_context()
         self.watch = {p: file_stamp(p) for p in watch if p}
         self.revocation = Revocation(crl, ca) if crl else None
         self.slots = threading.BoundedSemaphore(max_connections)
         self.max_connections, self.per_host = max_connections, max(8, max_connections // 16)
-        self.lock, self.handshaking = threading.Lock(), Counter()
+        self.per_client = max_per_client or max(16, max_connections // 8)
+        self.lock, self.handshaking, self.open = threading.Lock(), Counter(), Counter()
+        self.rate, self.buckets, self.warned = max_rate_per_client, {}, {}
         self.handshake_timeout = handshake_timeout
         self.stats = Stats()
         self.stopping = threading.Event()
         self.threads = set()
         self.live = {}  # connection -> (client certificate serial, chain above it), for closing revoked ones
-        self.sock = socket.create_server(address, reuse_port=reuse_port, backlog=128)
+        self.sock = socket.create_server(address, reuse_port=reuse_port, backlog=1024)
         self.sock.settimeout(1.0)
         self.port = self.sock.getsockname()[1]
 
@@ -160,13 +174,14 @@ class Server:
                 continue
             if not self.slots.acquire(blocking=False):
                 self.stats.add("refused_busy")
-                log.warning("%s: refusing %s, connection limit reached", self.name, addr[0])
+                self._refuse(addr[0], "connection limit reached")
                 sock.close()
                 continue
-            if not self._admit(addr[0]):
+            refused = self._admit(addr[0])
+            if refused:
                 self.slots.release()
                 self.stats.add("refused_host")
-                log.warning("%s: refusing %s, too many unfinished handshakes from it", self.name, addr[0])
+                self._refuse(addr[0], refused)
                 sock.close()
                 continue
             t = threading.Thread(target=self._run, args=(sock, addr, self.ctx), daemon=True)
@@ -196,13 +211,47 @@ class Server:
                     pass
 
     def _admit(self, host):
-        """Once half the connections are taken, a host with `per_host` handshakes still unfinished waits, so one machine
-        opening sockets and sending nothing cannot lock everyone else out."""
+        """None, or why `host` waits. An address opens at most `rate` connections a second (bursts of twice that): a handshake
+        costs milliseconds of CPU, so one machine reconnecting as fast as it can would otherwise take nearly all of it and
+        slow everyone else's new connections 40-fold. Once half the connections are taken, an address with `per_host` handshakes unfinished, or
+        `per_client` connections open, gets no more: one machine opening connections and sending nothing, before or after the
+        handshake, cannot lock everyone else out. Below half, a busy partner behind one NAT address is not held back."""
         with self.lock:
-            if self.handshaking[host] >= self.per_host and len(self.threads) >= self.max_connections // 2:
-                return False
+            if self.rate and not is_loopback(host) and not self._take(host):
+                return f"it opens more than {self.rate:g} connections a second (max_rate_per_client)"
+            if len(self.threads) >= self.max_connections // 2:
+                if self.handshaking[host] >= self.per_host:
+                    return "too many unfinished handshakes from it"
+                if self.open[host] >= self.per_client:
+                    return f"it already holds {self.open[host]} connections (max_per_client)"
             self.handshaking[host] += 1
-            return True
+            self.open[host] += 1
+            return None
+
+    def _take(self, host):
+        """Token bucket per address; called under the lock. Addresses quiet for a minute are forgotten."""
+        t = time.monotonic()
+        tokens, last = self.buckets.get(host, (2 * self.rate, t))
+        tokens = min(2 * self.rate, tokens + (t - last) * self.rate)
+        if len(self.buckets) > 10000:
+            self.buckets = {h: v for h, v in self.buckets.items() if t - v[1] < 60}
+        self.buckets[host] = (tokens - 1, t) if tokens >= 1 else (tokens, t)
+        return tokens >= 1
+
+    def _refuse(self, host, why):
+        self._warn(host, "refusing", f"refusing {host}, {why}", why.split(" ", 1)[0])
+
+    def _warn(self, host, kind, message, reason=""):
+        """One warning per address and kind every 10 seconds: a flood is refused without filling the disk with log lines."""
+        key, t = (host, kind, reason), time.monotonic()
+        with self.lock:
+            quiet = t - self.warned.get(key, -60) >= 10
+            if quiet:
+                self.warned[key] = t
+                if len(self.warned) > 10000:
+                    self.warned = {k: v for k, v in self.warned.items() if t - v < 60}
+        if quiet:
+            log.warning("%s: %s (repeats from this address are counted in /status, not logged, for 10 s)", self.name, message)
 
     def _handshake_over(self, host):
         with self.lock:
@@ -226,7 +275,7 @@ class Server:
                     return
                 self.stats.add("handshake_failed")
                 hint = next((h for k, h in HINTS.items() if k in str(e)), "")
-                log.warning("%s: rejected %s: %s%s", self.name, peer, e, hint)
+                self._warn(addr[0], "rejected", f"rejected {peer}: {e}{hint}")
                 return
             finally:
                 self._handshake_over(addr[0])
@@ -256,6 +305,9 @@ class Server:
             self.slots.release()
             with self.lock:
                 self.threads.discard(threading.current_thread())
+                self.open[addr[0]] -= 1
+                if not self.open[addr[0]]:
+                    del self.open[addr[0]]
 
     def start(self):
         t = threading.Thread(target=self.serve_forever, daemon=True, name=self.name)

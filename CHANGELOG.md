@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Facing the internet: one address may open at most 50 new connections a second (`max_rate_per_client`; bursts of twice that; this machine's own connections are exempt) and, once the edge is half full, hold at most an eighth of its connections (`max_per_client`). Before, one machine could take every connection slot by completing handshakes and then idling, or slow everyone else's new connections from 4 ms to 180 ms by reconnecting as fast as it could. Refusals and failed handshakes are logged once per address every 10 seconds, so a flood cannot fill the disk. The accept backlog is 1,024 (was 128).
+- The edge warns when its metrics port listens beyond this machine: `/status` lists every route and upstream without a login.
+
 - Revocation lists are verified once per change instead of on every connection: with 20,000 revoked certificates a mutual-TLS handshake no longer spends 26 ms re-checking the list (35 handshakes a second before, 150 after, the same as with an empty list). A list with a damaged version field is now refused with a clear message instead of an unhandled error.
 - The edge raises its open-file limit at start (systemd's default of 1,024 allowed only about 340 connections) and warns when `max_connections` still cannot fit; each connection now holds two file descriptors instead of three. The systemd unit sets `LimitNOFILE=65536`. `--max-connections` sets the limit without a config file. Measured: 9,000 open connections in one process, about 105 KB each.
 - The refusal hint for clients without a matching key exchange names what the policy needs (cnsa2: ML-KEM-1024).
