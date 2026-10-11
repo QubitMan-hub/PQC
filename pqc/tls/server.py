@@ -153,7 +153,8 @@ class Server:
         return True
 
     def serve_forever(self):
-        log.info("%s: listening on %s:%d", self.name, self.address[0] or "*", self.port)
+        host = self.address[0] or "*"
+        log.info("%s: listening on %s:%d", self.name, f"[{host}]" if ":" in host else host, self.port)
         last_watch = time.monotonic()
         while not self.stopping.is_set():
             if time.monotonic() - last_watch > 5:

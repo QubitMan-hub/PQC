@@ -75,8 +75,19 @@ def client_context(ca=None, cert=None, key=None, policy_name="strict", key_passp
 
 def connect(host, port, ctx, server_name=None, timeout=10.0):
     """Open a verified TLS 1.3 connection; the certificate must match `server_name` (defaults to `host`)."""
-    sock = nodelay(socket.create_connection((host, port), timeout=timeout))
+    sock = nodelay(_dial(host, port, timeout))
     return ctx.wrap(sock, server_name or host, timeout)
+
+
+def _dial(host, port, timeout):
+    """For "localhost", IPv4 first: Windows tries ::1 first and, when the server listens on 127.0.0.1 only, waits two
+    seconds after the refusal before trying IPv4."""
+    if host.lower() != "localhost":
+        return socket.create_connection((host, port), timeout=timeout)
+    try:
+        return socket.create_connection(("127.0.0.1", port), timeout=timeout)
+    except ConnectionRefusedError:
+        return socket.create_connection(("::1", port), timeout=timeout)
 
 
 def nodelay(sock):
@@ -94,20 +105,29 @@ __all__ = ["Connection", "Context", "OpenSSLUnavailable", "POLICIES", "Policy", 
 
 
 def listen(address, backlog=1024, reuse_port=False):
-    """A listening socket for (host, port). An IPv6 host gets an IPv6 socket; "::" also takes IPv4 clients where the system
-    allows one socket for both."""
+    """A listening socket for (host, port). An IPv6 host gets an IPv6 socket; "::" (every interface, the default) also takes
+    IPv4 clients, and falls back to IPv4 alone on a machine without IPv6."""
     if ":" not in address[0]:
         return socket.create_server(address, backlog=backlog, reuse_port=reuse_port)
-    return socket.create_server(address, family=socket.AF_INET6, backlog=backlog, reuse_port=reuse_port,
-                                dualstack_ipv6=address[0] == "::" and socket.has_dualstack_ipv6())
+    try:
+        return socket.create_server(address, family=socket.AF_INET6, backlog=backlog, reuse_port=reuse_port,
+                                    dualstack_ipv6=address[0] == "::" and socket.has_dualstack_ipv6())
+    except OSError:
+        if address[0] != "::":
+            raise
+        return socket.create_server(("0.0.0.0", address[1]), backlog=backlog, reuse_port=reuse_port)  # no IPv6 here
 
 
 def http_server(listen_on, handler):
-    """A ThreadingHTTPServer on "host:port" (default host 127.0.0.1), IPv6 when the host is."""
+    """A ThreadingHTTPServer on "host:port" (default host 127.0.0.1), on the same socket listen() gives."""
     from http.server import ThreadingHTTPServer
-    address = hostport(listen_on, "127.0.0.1")
-    cls = type("HTTPServer6", (ThreadingHTTPServer,), {"address_family": socket.AF_INET6}) if ":" in address[0] else ThreadingHTTPServer
-    return cls(address, handler)
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler, bind_and_activate=False)
+    httpd.socket.close()
+    httpd.socket = listen(hostport(listen_on, "127.0.0.1"), backlog=128)
+    httpd.address_family = httpd.socket.family
+    httpd.server_address = httpd.socket.getsockname()[:2]
+    httpd.server_name, httpd.server_port = httpd.server_address
+    return httpd
 
 
 def hostport(s, default_host="0.0.0.0"):

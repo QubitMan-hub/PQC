@@ -113,7 +113,7 @@ def add(sub):
     p.add_argument("--config", help="TOML file with [[edge]] routes; replaces the flags below")
     p.add_argument("--mode", choices=["terminate", "originate"], default="terminate",
                    help="terminate: post-quantum TLS in front of --target; originate: plain local clients reach a remote edge at --target")
-    p.add_argument("--listen", default="0.0.0.0:8443", help="host:port (default: every interface, port 8443)")
+    p.add_argument("--listen", default="[::]:8443", help="host:port (default: every interface, IPv4 and IPv6, port 8443)")
     p.add_argument("--target", help="upstream host:port (terminate) or remote edge host:port (originate)")
     policy(p)
     for flag, text in (("--cert", "the edge's certificate chain (chain.pem)"), ("--key", "its private key (key.pem)"),
@@ -146,7 +146,7 @@ def add(sub):
     policy(p)
     p = t.add_parser("serve", help="an echo server, for testing clients")
     p.set_defaults(func=cmd_tls)
-    p.add_argument("--listen", default="0.0.0.0:8443", help="host:port (default: every interface, port 8443)")
+    p.add_argument("--listen", default="[::]:8443", help="host:port (default: every interface, IPv4 and IPv6, port 8443)")
     p.add_argument("--cert", required=True, help="chain.pem")
     p.add_argument("--key", required=True)
     p.add_argument("--key-passphrase-env")

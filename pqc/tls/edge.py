@@ -361,7 +361,7 @@ def serve_metrics(address, edges, workers=None):
     httpd = serve_http(address, {"/metrics": (METRICS, lambda: metrics_text(edges, workers)), "/status": (JSON, status)})
     log.info("metrics on http://%s:%d/metrics", *httpd.server_address[:2])
     if not is_loopback(httpd.server_address[0]):
-        log.warning("metrics on %s are plain HTTP without a login and list every route and upstream address: keep that port "
-                    "off the internet (firewall it, or listen on 127.0.0.1 and let Prometheus reach it over a private network)",
+        log.warning("metrics on %s are plain HTTP without a login and list every route and upstream address: make sure only "
+                    "your monitoring can reach that port (a firewall, a private network, or a container port you do not publish)",
                     address)
     return httpd

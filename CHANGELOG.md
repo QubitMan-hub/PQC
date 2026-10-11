@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- On Windows, connecting to `localhost` took two seconds when the server listened on 127.0.0.1 (Windows tries ::1 first and waits after the refusal). pqc's client now tries 127.0.0.1 first for `localhost`, and the edge, `ca serve` and ACME listen on every interface for both IPv4 and IPv6 by default (`[::]`), falling back to IPv4 where there is no IPv6.
+
 - The edge, the console, ACME and the metrics page can listen on IPv6 (`--listen "[::]:443"` also takes IPv4 clients where the system allows); they failed with "address family not supported" before.
 
 - Mutual-TLS edges failed every resumed session ("session id context uninitialized"), and TLS clients resume automatically when they reconnect. Sessions now resume, a session from an edge that trusts other clients or another policy never does, and a revoked client is still refused when it resumes.
