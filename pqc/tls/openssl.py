@@ -4,12 +4,14 @@ Python's ssl module cannot choose TLS 1.3 key-exchange groups or report which on
 through libssl directly. Sockets run non-blocking under OpenSSL and every operation has a deadline.
 """
 import ctypes
+import hashlib
 import ipaddress
 import os
 import platform
 import re
 import select
 import time
+from pathlib import Path
 
 MIN_VERSION = 0x30500000
 TLS1_3_VERSION = 0x0304
@@ -42,6 +44,8 @@ PROTOTYPES = {
         ("SSL_CTX_set_ciphersuites", [P, S], I), ("SSL_CTX_use_certificate_chain_file", [P, S], I),
         ("SSL_CTX_use_PrivateKey", [P, P], I), ("SSL_CTX_check_private_key", [P], I),
         ("SSL_CTX_load_verify_locations", [P, S, S], I), ("SSL_CTX_set_verify", [P, I, P], None), ("SSL_CTX_set_purpose", [P, I], I),
+        ("SSL_CTX_set_session_id_context", [P, B, ctypes.c_uint], I), ("SSL_get1_session", [P], P), ("SSL_set_session", [P, P], I),
+        ("SSL_SESSION_free", [P], None), ("SSL_session_reused", [P], I),
         ("SSL_new", [P], P), ("SSL_free", [P], None), ("SSL_set_fd", [P, I], I), ("SSL_ctrl", [P, I, L, P], L),
         ("SSL_set_accept_state", [P], None), ("SSL_set_connect_state", [P], None), ("SSL_do_handshake", [P], I),
         ("SSL_read", [P, P, I], I), ("SSL_write", [P, B, I], I), ("SSL_pending", [P], I), ("SSL_shutdown", [P], I),
@@ -196,6 +200,13 @@ class Context:
             if verify and (not server or require_client_cert or request_client_cert):
                 mode = VERIFY_PEER | (VERIFY_FAIL_IF_NO_PEER_CERT if server and require_client_cert else 0)
             L_.SSL_CTX_set_verify(self.ptr, mode, None)
+            if server:
+                # Without it OpenSSL fails every resumed session ("session id context uninitialized") once client
+                # certificates are checked, and clients resume automatically. Derived from what the server trusts, so a
+                # session from an edge that trusted other clients, or another policy, is never resumed here.
+                sid = hashlib.sha256(b"|".join([groups.encode(), str(sigalgs).encode(), str(mode).encode(),
+                                                Path(ca).read_bytes() if ca else b""])).digest()[:32]
+                self._check(L_.SSL_CTX_set_session_id_context(self.ptr, sid, len(sid)), "set the session id context")
             if any_purpose:
                 self._check(L_.SSL_CTX_set_purpose(self.ptr, X509_PURPOSE_ANY), "accept certificates of any purpose")
         except Exception:

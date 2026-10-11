@@ -193,6 +193,41 @@ class TLSTest(unittest.TestCase):
                 s._refuse("203.0.113.5", "it opens more than 5 connections a second")
         self.assertEqual(len(logs.output), 1)
 
+    def test_mutual_tls_clients_can_resume_and_a_revoked_one_still_cannot(self):
+        from pqc.tls.openssl import lib
+        L = lib()
+        if not hasattr(L, "SSL_get1_session"):
+            self.skipTest("this binding does not expose sessions")
+        who, rec = self.ca.issue("resumer", "client")
+        s = self.server(mtls=True)
+        ctx = self.client(who)
+        with tls.connect("127.0.0.1", s.port, ctx, "localhost", timeout=3) as c:
+            c.sendall(b"one")
+            self.assertEqual(c.recv(timeout=3), b"one")
+            session = L.SSL_get1_session(c.ssl)
+        self.addCleanup(L.SSL_SESSION_free, session)
+
+        def again():
+            from pqc.tls.openssl import Connection
+            sock = socket.create_connection(("127.0.0.1", s.port), timeout=3)
+            conn = Connection(ctx, sock, 3)
+            L.SSL_set_session(conn.ssl, session)
+            conn.handshake("localhost")
+            conn.sendall(b"two")
+            return conn, conn.recv(timeout=3)
+        conn, reply = again()
+        with conn:
+            self.assertTrue(L.SSL_session_reused(conn.ssl), "the session was resumed")
+            self.assertEqual((reply, conn.group), (b"two", "X25519MLKEM768"))
+        self.ca.revoke(rec.serial)
+        time.sleep(0.05)
+        try:
+            conn, reply = again()
+            conn.close()
+        except (tls.TLSError, OSError):
+            reply = b""
+        self.assertEqual(reply, b"", "a revoked client cannot get back in by resuming")
+
     def test_a_damaged_crl_refuses_everyone_and_says_why(self):
         crl = Path(self.tmp.name) / "damaged-crl.pem"
         crl.write_bytes(b"-----BEGIN X509 CRL-----\nAAAA\n-----END X509 CRL-----\n")
