@@ -231,7 +231,7 @@ def add(sub, common):
     p.add_argument("--allow-local-validation", action="store_true",
                    help="let http-01 validation reach loopback and link-local addresses (refused by default; private networks are allowed)")
     p.add_argument("--days", type=int, default=90, help="lifetime of issued certificates")
-    p.add_argument("--tls-cert", help="a certificate ACME clients trust (classical: clients cannot verify ML-DSA yet)")
+    p.add_argument("--tls-cert", help="a certificate ACME clients trust (use a classical certificate for broad compatibility)")
     p.add_argument("--tls-key")
     p = ca.add_parser("eab", parents=[common], help="an ACME external account binding key for one client")
     p.set_defaults(func=cmd_acme)

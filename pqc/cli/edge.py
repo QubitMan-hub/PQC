@@ -124,7 +124,7 @@ def add(sub):
                        ("--server-name", "originate: the name in the remote edge's certificate, if not its host"),
                        ("--metrics", "host:port for /metrics (Prometheus), /healthz and /status, e.g. 127.0.0.1:9100")):
         p.add_argument(flag, help=text)
-    p.add_argument("--fallback-cert", help="with --policy transition: an ECDSA or RSA certificate for browsers that cannot verify ML-DSA")
+    p.add_argument("--fallback-cert", help="with --policy transition: a trusted classical certificate, preferred for dual-capability clients")
     p.add_argument("--fallback-key", help="the fallback certificate's private key")
     p.add_argument("--require-client-cert", action="store_true", help="mutual TLS")
     p.add_argument("--proxy-protocol", action="store_true", help="send a PROXY v1 header so the upstream sees the client address")

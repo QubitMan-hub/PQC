@@ -59,7 +59,8 @@ Opens a page in your browser where you issue, download, renew and revoke certifi
 
 ## Good to know
 
-- Browsers cannot check ML-DSA certificates yet. For websites, run the edge with `--policy transition` and a classical fallback certificate (`--fallback-cert`, `--fallback-key`).
+- Browser certificate support and trust stores vary. For websites, run the edge with `--policy transition` and a browser-trusted classical fallback certificate (`--fallback-cert`, `--fallback-key`). The edge prefers that certificate for clients offering both classical and ML-DSA signatures; strict PQC clients still receive the ML-DSA certificate.
+  Transition mode prefers post-quantum key exchange but also permits classical exchange. Check the negotiated group in edge metrics; a fallback certificate uses classical authentication even when key exchange is post-quantum. See [the compatibility and review guide](docs/security-review.md).
 - A network that inspects TLS (a corporate proxy that re-signs traffic) ends the post-quantum protection at that proxy: clients see the proxy's classical certificate. `pqc tls connect` and the console's connection test show it as a certificate from another CA.
 - One edge process handles about 4,000 requests a second on kept-alive connections and about 400 new handshakes a second; `--workers` adds processes (Linux). Each open connection takes about 100 KB of memory; the default limit is 512 per route (`--max-connections`). Measure your own machine with `python tests/interop/bench.py`.
 - On the internet, the edge limits each address to 50 new connections a second and, when busy, an eighth of the connection slots, so one machine cannot slow or lock out everyone else. Behind a load balancer every client shares the balancer's address: set `max_rate_per_client = 0` and `max_per_client` to `max_connections` there. A flood from many machines at once (a botnet) needs protection in front of the edge, from your hosting or a DDoS service.

@@ -19,9 +19,24 @@ How to work on the code itself. Using the product is in the [README](README.md).
 Python 3.11+, from a clone:
 
 ```
-pip install -e ".[test,integration]"   # [integration]: certbot and acme, for the ACME tests
+pip install -c constraints.txt setuptools
+pip install --no-build-isolation -c constraints.txt -e ".[test,integration]" ruff
 pqc doctor
 ```
+
+`integration` installs certbot and acme for the ACME tests. `constraints.txt` pins the
+dependencies for development, CI and the container, including optional KMS dependencies
+when requested. The library's dependency ranges stay in `pyproject.toml`. Install the
+pinned setuptools first; `--no-build-isolation` then uses that version for the build.
+
+To deliberately refresh the pins with uv 0.12.23, then run the tests:
+
+```
+uv pip compile --universal --all-extras --python-version 3.11 --no-python-downloads pyproject.toml requirements-tools.in --upgrade --output-file constraints.txt
+```
+
+Review dependency updates before committing the regenerated file. CI's separate audit
+job also checks the latest versions allowed by the library's ranges.
 
 ## Tests
 

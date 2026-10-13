@@ -3,8 +3,8 @@
 Accounts sign requests with classical keys (RS256, ES256/384/512 or EdDSA), as every ACME client does. The certificates they
 get are ML-DSA: the CSR must carry an ML-DSA public key (certbot `--csr`, or `pqc` generating it). Identifiers are
 proved with http-01 (RFC 8555) for DNS names and IP addresses (RFC 8738). External account binding (RFC 8555 7.3.4) keeps
-strangers from registering. The ACME service itself speaks ordinary HTTPS, because ACME clients cannot yet verify ML-DSA
-server certificates: give it a classical certificate, or run it on localhost behind a terminating proxy.
+strangers from registering. The ACME service itself speaks ordinary HTTPS: give it a classical certificate for broad client
+compatibility, or run it on localhost behind a terminating proxy. Strict PQC policy is not enforced on this listener.
 """
 import base64
 import collections
@@ -21,7 +21,7 @@ import socket
 import ssl
 import threading
 import urllib.request
-from http.server import BaseHTTPRequestHandler
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from cryptography import x509
@@ -324,13 +324,16 @@ class Service:
     def refresh(self, oid):
         o = self.state["orders"][oid]
         if o["status"] in ("pending", "ready"):
-            states = [self.state["authz"][a]["status"] for a in o["authorizations"]]
-            if o["expires"] < _iso(now()):
+            authz = [self.state["authz"][a] for a in o["authorizations"]]
+            current = _iso(now())
+            if o["expires"] <= current:
                 o["status"] = "invalid"
-            elif "invalid" in states:
-                o["status"], o["error"] = "invalid", {"type": ERR + "unauthorized", "detail": "an authorization failed"}
-            elif all(s == "valid" for s in states):
+            elif any(a['status'] not in ('pending', 'valid') or a['expires'] <= current for a in authz):
+                o["status"], o["error"] = "invalid", {"type": ERR + "unauthorized", "detail": "an authorization is no longer valid"}
+            elif all(a['status'] == 'valid' for a in authz):
                 o["status"] = "ready"
+            else:
+                o['status'] = 'pending'
 
     def order_view(self, oid):
         o = self.state["orders"][oid]
@@ -396,6 +399,10 @@ class Service:
         except (OSError, ValueError, http.client.HTTPException) as e:
             ok, detail = False, f"could not fetch {url}: {e or type(e).__name__}"
         with self.lock:
+            if a['status'] != 'pending':
+                return
+            if a.get('expires') and a['expires'] <= _iso(now()):
+                ok, detail = False, 'the authorization expired during validation'
             a["challenge_status"] = a["status"] = "valid" if ok else "invalid"
             if ok:
                 a["validated"] = _iso(now())
@@ -476,8 +483,36 @@ def create_eab(root, note=""):
     return kid, key
 
 
-def serve(service, listen, tls_cert=None, tls_key=None):
+def serve(service, listen, tls_cert=None, tls_key=None, handshake_timeout=10, max_connections=128):
     """An HTTP(S) server for the ACME service; TLS uses Python's ssl module, so give it a certificate ACME clients accept."""
+    class Server(ThreadingHTTPServer):
+        context = None
+
+        def __init__(self, *args, **kwargs):
+            self.slots = threading.BoundedSemaphore(max_connections)
+            super().__init__(*args, **kwargs)
+
+        def process_request(self, request, address):
+            if not self.slots.acquire(blocking=False):
+                return self.shutdown_request(request)
+            try:
+                super().process_request(request, address)
+            except BaseException:
+                self.slots.release()
+                raise
+
+        def process_request_thread(self, request, address):
+            try:
+                if self.context:
+                    request.settimeout(handshake_timeout)
+                    request = self.context.wrap_socket(request, server_side=True, do_handshake_on_connect=False)
+                    request.do_handshake()
+                super().process_request_thread(request, address)
+            except OSError:
+                self.shutdown_request(request)
+            finally:
+                self.slots.release()
+
     class Handler(BaseHTTPRequestHandler):
         timeout = HTTP_IDLE
         server_version = f"{NAME}-acme/{__version__}"
@@ -521,13 +556,13 @@ def serve(service, listen, tls_cert=None, tls_key=None):
             log.debug(fmt, *args)
 
     from ..tls import http_server
-    httpd = http_server(listen, Handler)
+    httpd = http_server(listen, Handler, Server)
     httpd.service = service
     if tls_cert:
         ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         ctx.minimum_version = ssl.TLSVersion.TLSv1_3
         ctx.load_cert_chain(tls_cert, tls_key)
-        httpd.socket = ctx.wrap_socket(httpd.socket, server_side=True)
+        httpd.context = ctx
     return httpd
 
 

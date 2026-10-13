@@ -175,7 +175,7 @@ pqc ca revoke SERIAL --reason keyCompromise</pre>
       <table class="plain">
         <tr><th>Policy</th><th>Who gets in</th><th>Use it for</th></tr>
         <tr><td><code>strict</code> (default)</td><td>Only post-quantum clients</td><td>APIs, databases, partners, anything you control both ends of</td></tr>
-        <tr><td><code>transition</code></td><td>Also classical clients; add <code>--fallback-cert</code> and <code>--fallback-key</code> (an ECDSA or RSA certificate) for browsers</td><td>Websites, while browsers cannot check ML-DSA yet</td></tr>
+        <tr><td><code>transition</code></td><td>Also classical clients; add a trusted <code>--fallback-cert</code> and <code>--fallback-key</code> for web clients. Dual-capability clients receive that certificate; strict PQC clients receive ML-DSA.</td><td>Browser-facing services with classical authentication and hybrid exchange when offered</td></tr>
         <tr><td><code>cnsa2</code></td><td>Only ML-KEM-1024, ML-DSA-87 and AES-256</td><td>The stronger profile CNSA 2.0 asks for</td></tr>
       </table>
     </div>

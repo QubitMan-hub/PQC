@@ -17,11 +17,20 @@ from pathlib import Path
 MIN_VERSION = 0x30500000
 TLS1_3_VERSION = 0x0304
 CTRL_MODE, MODE_NO_AUTO_CHAIN = 33, 0x8
+OP_CIPHER_SERVER_PREFERENCE = 1 << 22
 CTRL_SET_GROUPS_LIST, CTRL_SET_SIGALGS_LIST, CTRL_SET_TLSEXT_HOSTNAME = 92, 98, 55
 CTRL_SET_MIN_PROTO_VERSION, CTRL_SET_MAX_PROTO_VERSION = 123, 124
 VERIFY_NONE, VERIFY_PEER, VERIFY_FAIL_IF_NO_PEER_CERT = 0, 1, 2
 X509_PURPOSE_ANY = 7
 WANT_READ, WANT_WRITE, ERROR_SYSCALL, ZERO_RETURN = 2, 3, 5, 6
+
+# Public-CA fallback first for clients offering both kinds; strict clients still select ML-DSA.
+FALLBACK_SIGALGS = (
+    'ecdsa_secp256r1_sha256:ecdsa_secp384r1_sha384:ecdsa_secp521r1_sha512:ed25519:ed448:'
+    'ecdsa_brainpoolP256r1tls13_sha256:ecdsa_brainpoolP384r1tls13_sha384:ecdsa_brainpoolP512r1tls13_sha512:'
+    'rsa_pss_rsae_sha256:rsa_pss_rsae_sha384:rsa_pss_rsae_sha512:'
+    'rsa_pss_pss_sha256:rsa_pss_pss_sha384:rsa_pss_pss_sha512:mldsa87:mldsa65:mldsa44'
+)
 
 P, I, L, S, B = ctypes.c_void_p, ctypes.c_int, ctypes.c_long, ctypes.c_char_p, ctypes.c_char_p
 PROTOTYPES = {
@@ -43,6 +52,7 @@ PROTOTYPES = {
     "ssl": [
         ("TLS_server_method", [], P), ("TLS_client_method", [], P),
         ("SSL_CTX_new", [P], P), ("SSL_CTX_free", [P], None), ("SSL_CTX_ctrl", [P, I, L, P], L),
+        ("SSL_CTX_set_options", [P, ctypes.c_uint64], ctypes.c_uint64),
         ("SSL_CTX_set_ciphersuites", [P, S], I), ("SSL_CTX_use_certificate_chain_file", [P, S], I),
         ("SSL_CTX_use_PrivateKey", [P, P], I), ("SSL_CTX_check_private_key", [P], I),
         ("SSL_CTX_load_verify_locations", [P, S, S], I), ("SSL_CTX_set_verify", [P, I, P], None), ("SSL_CTX_set_purpose", [P, I], I),
@@ -67,11 +77,20 @@ KEEP_GIL = {"ERR_clear_error", "ERR_get_error", "SSL_read", "SSL_write", "SSL_pe
 
 def _self_signed(pem):
     from cryptography import x509
+    from cryptography.exceptions import InvalidSignature, UnsupportedAlgorithm
     try:
         c = x509.load_pem_x509_certificate(pem)
+        if c.subject != c.issuer:
+            return False
+        c.verify_directly_issued_by(c)
+        return True
+    except UnsupportedAlgorithm:
+        from ..pki import signed_by
+        return signed_by(c, c.tbs_certificate_bytes, c.signature)
+    except InvalidSignature:
+        return False
     except ValueError:
         return False
-    return c.subject == c.issuer
 
 
 class TLSError(Exception):
@@ -95,8 +114,9 @@ def _names(stem):
         found = []
         for folder in folders + os.environ.get("PATH", "").split(os.pathsep):
             if os.path.isdir(folder):
-                found += [(int(m.group(1)), os.path.join(folder, f)) for f in os.listdir(folder) if (m := rx.match(f))]
-        return [f for _, f in sorted(found, reverse=True)]
+                matches = [(int(m.group(1)), os.path.join(folder, f)) for f in os.listdir(folder) if (m := rx.match(f))]
+                found.extend(f for _, f in sorted(matches, reverse=True))
+        return found
     name = f"lib{stem}.3.dylib" if system == "Darwin" else f"lib{stem}.so.3"
     return [os.path.join(f, name) for f in folders] + [name]
 
@@ -180,10 +200,13 @@ def is_ip(name):
 
 class Context:
     """A TLS 1.3-only SSL_CTX. `groups` and `sigalgs` are OpenSSL list strings, e.g. "X25519MLKEM768" and "mldsa65".
-    `fallback` is (cert, key[, passphrase]) of a classical certificate that OpenSSL sends to clients that cannot verify ML-DSA."""
+    `fallback` is (cert, key[, passphrase]) of a classical certificate. With default signature algorithms it is preferred
+    for dual-capability clients; clients offering only ML-DSA still get the primary certificate."""
 
     def __init__(self, server, groups, sigalgs=None, ciphersuites=None, cert=None, key=None, key_passphrase=None,
                  ca=None, verify=True, require_client_cert=False, request_client_cert=False, any_purpose=False, fallback=None):
+        if fallback and not sigalgs:
+            sigalgs = FALLBACK_SIGALGS
         L_ = lib()
         L_.ERR_clear_error()
         self.server = server
@@ -207,6 +230,7 @@ class Context:
             if fallback:
                 self._use_chain(fallback[0])
                 self._use_key(fallback[1], fallback[2] if len(fallback) > 2 else None)
+                L_.SSL_CTX_set_options(self.ptr, OP_CIPHER_SERVER_PREFERENCE)
             if ca:
                 self._check(L_.SSL_CTX_load_verify_locations(self.ptr, os.fsencode(ca), None), f"load CA {ca}")
             mode = VERIFY_NONE
@@ -255,6 +279,8 @@ class Context:
         with open(path, "rb") as f:
             data = f.read()
         bio = L_.BIO_new_mem_buf(data, len(data))
+        if not bio:
+            raise TLSError(f"cannot allocate a private-key BIO: {errors()}")
         try:
             pkey = L_.PEM_read_bio_PrivateKey(bio, None, None, passphrase or b"")
         finally:
@@ -292,17 +318,25 @@ class Context:
 class Connection:
     def __init__(self, ctx, sock, timeout):
         L_ = lib()
+        if not ctx.ptr:
+            raise TLSError('TLS context is closed')
         self.ctx, self.sock, self.timeout = ctx, sock, timeout
         sock.setblocking(False)
         self.closed = False
-        self.ssl = L_.SSL_new(ctx.ptr)
-        if not self.ssl or L_.SSL_set_fd(self.ssl, sock.fileno()) != 1:
+        self._ssl = L_.SSL_new(ctx.ptr)
+        if not self._ssl or L_.SSL_set_fd(self._ssl, sock.fileno()) != 1:
             msg = errors()
-            if self.ssl:
-                L_.SSL_free(self.ssl)
-            self.ssl = None
+            if self._ssl:
+                L_.SSL_free(self._ssl)
+            self._ssl = None
             raise TLSError(msg)
         (L_.SSL_set_accept_state if ctx.server else L_.SSL_set_connect_state)(self.ssl)
+
+    @property
+    def ssl(self):
+        if self.closed or not self._ssl:
+            raise TLSError('TLS connection is closed')
+        return self._ssl
 
     def handshake(self, server_name=None):
         L_ = lib()
@@ -407,7 +441,8 @@ class Connection:
     def export(self, label, context, length=32):
         """Keying material from this session (RFC 8446 section 7.5): both peers get the same bytes, nobody else can."""
         out = ctypes.create_string_buffer(length)
-        if lib().SSL_export_keying_material(self.ssl, out, length, label.encode(), len(label), context, len(context), 1) != 1:
+        label = label.encode()
+        if lib().SSL_export_keying_material(self.ssl, out, length, label, len(label), context, len(context), 1) != 1:
             raise TLSError(f"cannot export keying material: {errors()}")
         return out.raw
 
@@ -425,11 +460,15 @@ class Connection:
             return
         self.closed = True
         try:
-            if self.ssl:
-                self._shutdown()
-                lib().SSL_free(self.ssl)
+            if self._ssl:
+                try:
+                    self._shutdown()
+                except OSError:
+                    pass  # closing is best effort if the peer or socket has already gone
+                finally:
+                    lib().SSL_free(self._ssl)
         finally:
-            self.ssl = None
+            self._ssl = None
             self.sock.close()
 
     def _shutdown(self):
@@ -438,8 +477,8 @@ class Connection:
         L_, deadline = lib(), time.monotonic() + min(self.timeout, 5)
         while True:
             L_.ERR_clear_error()
-            r = L_.SSL_shutdown(self.ssl)
-            if r >= 0 or L_.SSL_get_error(self.ssl, r) != WANT_WRITE:
+            r = L_.SSL_shutdown(self._ssl)
+            if r >= 0 or L_.SSL_get_error(self._ssl, r) != WANT_WRITE:
                 break
             left = deadline - time.monotonic()
             if left <= 0 or not self._wait(False, left):

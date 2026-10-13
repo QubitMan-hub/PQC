@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- CRLs carry persistent, increasing numbers; downloads reject rollback, numbering downgrades and same-second loss of legacy revocations. Include `crl-number` in CA backups.
+- Native ACME HTTPS handshakes run in bounded workers with deadlines; issuance rechecks authorization expiry and deactivation, and asynchronous validation cannot reactivate a deactivated authorization.
+- The OpenSSL bridge rejects calls after connection closure, frees SSL objects after shutdown errors, handles BIO/digest allocation failures, preserves configured Windows library precedence, and uses the encoded exporter-label length.
+- Certificate chains retain self-issued CA key-rollover certificates unless their self-signature verifies.
+- Transition edges with a classical fallback prefer it for dual-capability clients, including browsers that advertise ML-DSA but trust only the fallback CA. Strict PQC clients still receive ML-DSA certificates; hybrid key exchange remains preferred.
+- Development, CI and container dependencies use reviewed version pins. Weekly CI audits the frozen pins as well as allowed library ranges; compatibility and independent-review requirements are documented.
+
 - The edge and clients no longer send the self-signed root in their certificate chain (the peer already has it): the edge's first handshake reply shrinks from 19 KB to 12 KB, inside TCP's initial window, which saves a round trip on every new connection over a real network. OpenSSL's automatic chain building, which put the root back when a client-CA file was loaded, is off; chain files on disk are unchanged.
 
 - On Windows, connecting to `localhost` took two seconds when the server listened on 127.0.0.1 (Windows tries ::1 first and waits after the refusal). pqc's client now tries 127.0.0.1 first for `localhost`, and the edge, `ca serve` and ACME listen on every interface for both IPv4 and IPv6 by default (`[::]`), falling back to IPv4 where there is no IPv6.

@@ -53,8 +53,8 @@ def server_context(cert, key, ca=None, require_client_cert=False, policy_name="s
                    any_purpose=False, fallback=None):
     """`request_client_cert` asks for a client certificate and verifies it if one is sent, but lets clients without one in.
     `any_purpose` accepts a client certificate whose extended key usage is not clientAuth (the chain is still verified).
-    `fallback` (cert, key) is a classical certificate for browsers and other clients that cannot verify ML-DSA yet; it needs
-    a policy that allows classical signatures (transition)."""
+    `fallback` (cert, key) is a trusted classical certificate, preferred for clients offering both signature families.
+    It needs transition policy; clients offering only ML-DSA still get the primary certificate."""
     p = policy(policy_name)
     if (require_client_cert or request_client_cert) and not ca:
         raise TLSError("checking client certificates needs the CA that issued them")
@@ -118,10 +118,10 @@ def listen(address, backlog=1024, reuse_port=False):
         return socket.create_server(("0.0.0.0", address[1]), backlog=backlog, reuse_port=reuse_port)  # no IPv6 here
 
 
-def http_server(listen_on, handler):
+def http_server(listen_on, handler, server_class=None):
     """A ThreadingHTTPServer on "host:port" (default host 127.0.0.1), on the same socket listen() gives."""
     from http.server import ThreadingHTTPServer
-    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler, bind_and_activate=False)
+    httpd = (server_class or ThreadingHTTPServer)(("127.0.0.1", 0), handler, bind_and_activate=False)
     httpd.socket.close()
     httpd.socket = listen(hostport(listen_on, "127.0.0.1"), backlog=128)
     httpd.address_family = httpd.socket.family

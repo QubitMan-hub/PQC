@@ -17,11 +17,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Debian 13's Go 1.24, and Node and curl built on its OpenSSL 3.5
         run: apt-get update && apt-get install -y --no-install-recommends golang-go nodejs curl ca-certificates
-      - run: pip install . && tests/interop/run.sh
+      - run: pip install -c constraints.txt setuptools
+      - run: pip install --no-build-isolation -c constraints.txt . && tests/interop/run.sh
   internet:
     runs-on: ubuntu-latest
     container: python:3.13-slim-trixie@sha256:7c61056e61ac89e852de05f3dc6fa51a6dd2181797bceed46aa725dd7cb2cd3b
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: apt-get update && apt-get install -y --no-install-recommends ca-certificates
-      - run: pip install . && tests/interop/internet.sh
+      - run: pip install -c constraints.txt setuptools
+      - run: pip install --no-build-isolation -c constraints.txt . && tests/interop/internet.sh

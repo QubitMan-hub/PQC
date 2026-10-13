@@ -1,7 +1,7 @@
 """The console: one page for the CA, its certificates, the edges and a connection test.
 
 It listens on localhost and wants a bearer token on every API call. For remote access put `pqc tls edge --policy transition`
-in front of it: browsers already do X25519MLKEM768, though they cannot verify ML-DSA certificates yet.
+in front of it with a browser-trusted fallback certificate. Check negotiated groups for post-quantum key exchange.
 """
 import base64
 import datetime as dt

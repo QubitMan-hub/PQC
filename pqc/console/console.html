@@ -457,7 +457,7 @@ function viewSetup() {
     curl: "Needs curl built with OpenSSL 3.5 or newer (check with curl -V); older builds cannot verify ML-DSA certificates.",
     python: "Needs a Python whose ssl module uses OpenSSL 3.5 or newer (python -c \"import ssl; print(ssl.OPENSSL_VERSION)\").",
     nginx: "Needs nginx built with OpenSSL 3.5 or newer. With an older nginx, use the originate edge on the last tab.",
-    other: "For anything whose TLS library cannot do ML-KEM and ML-DSA yet, including Java's built-in TLS today. Nothing in the app changes.",
+    other: "For a TLS library without ML-KEM or ML-DSA support. The app uses a local tunnel without changing its own TLS implementation.",
   };
   return h("div", {}, head("Client setup", "Connect an app with its certificate", "Download the certificate's zip (cert.pem, chain.pem, key.pem, ca.crt), unpack it next to the app, then use one of these."),
     h("div", { class: "card" }, h("form", { class: "issue", onsubmit: e => e.preventDefault() },

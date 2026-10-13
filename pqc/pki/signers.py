@@ -110,8 +110,12 @@ class OpenSSLSigner(Signer):
         from ..tls.openssl import errors, lib
         L_ = lib()
         bio = L_.BIO_new_mem_buf(pem, len(pem))
-        self.pkey = L_.PEM_read_bio_PrivateKey(bio, None, None, passphrase or b"")
-        L_.BIO_free(bio)
+        if not bio:
+            raise SignerError(f"cannot allocate a private-key BIO: {errors()}")
+        try:
+            self.pkey = L_.PEM_read_bio_PrivateKey(bio, None, None, passphrase or b"")
+        finally:
+            L_.BIO_free(bio)
         if not self.pkey:
             raise SignerError(f"cannot open the key: {errors()}")
         weakref.finalize(self, L_.EVP_PKEY_free, self.pkey)
@@ -135,6 +139,8 @@ class OpenSSLSigner(Signer):
             L_.EVP_PKEY_CTX_free(ctx)
         bio = L_.BIO_new(L_.BIO_s_mem())
         try:
+            if not bio:
+                raise SignerError(f"cannot allocate a private-key BIO: {errors()}")
             cipher = L_.EVP_aes_256_cbc() if passphrase else None
             if L_.PEM_write_bio_PKCS8PrivateKey(bio, pkey, cipher, passphrase, len(passphrase or b""), None, None) != 1:
                 raise SignerError(f"cannot write the key: {errors()}")
@@ -148,6 +154,8 @@ class OpenSSLSigner(Signer):
         from ..tls.openssl import errors, lib
         L_ = lib()
         md, n = L_.EVP_MD_CTX_new(), ctypes.c_size_t()
+        if not md:
+            raise SignerError(f"cannot allocate a signing context: {errors()}")
         try:
             if L_.EVP_DigestSignInit_ex(md, None, None, None, None, self.pkey, None) != 1 or L_.EVP_DigestSign(md, None, ctypes.byref(n), data, len(data)) != 1:
                 raise SignerError(f"cannot sign: {errors()}")
@@ -167,7 +175,7 @@ def verify(spki, data, signature):
     pkey = L_.d2i_PUBKEY(None, ctypes.byref(ctypes.c_void_p(ctypes.addressof(buf))), len(spki))
     md = L_.EVP_MD_CTX_new()
     try:
-        return bool(pkey) and L_.EVP_DigestVerifyInit_ex(md, None, None, None, None, pkey, None) == 1 and \
+        return bool(pkey and md) and L_.EVP_DigestVerifyInit_ex(md, None, None, None, None, pkey, None) == 1 and \
             L_.EVP_DigestVerify(md, signature, len(signature), data, len(data)) == 1
     finally:
         L_.EVP_MD_CTX_free(md)

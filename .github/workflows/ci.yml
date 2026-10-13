@@ -3,6 +3,8 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: "23 4 * * 1"
 permissions:
   contents: read
 jobs:
@@ -18,7 +20,8 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -e ".[test,integration]"
+      - run: pip install -c constraints.txt setuptools
+      - run: pip install --no-build-isolation -c constraints.txt -e ".[test,integration]"
       - run: python -m pytest -q
   macos:
     runs-on: macos-latest
@@ -29,7 +32,8 @@ jobs:
           python-version: "3.13"
       - name: OpenSSL 3.5+ from Homebrew, so the TLS tests run too
         run: brew install openssl@3 && echo "PQC_OPENSSL=$(brew --prefix openssl@3)/lib" >> "$GITHUB_ENV"
-      - run: pip install -e ".[test,integration]" && pqc doctor && pqc try
+      - run: pip install -c constraints.txt setuptools
+      - run: pip install --no-build-isolation -c constraints.txt -e ".[test,integration]" && pqc doctor && pqc try
       - name: A second loopback address, as Linux has, for the per-host limit test
         run: sudo ifconfig lo0 alias 127.0.0.2 up
       - run: python -m pytest -q
@@ -44,7 +48,8 @@ jobs:
         run: |
           choco install openssl -y --no-progress
           "PQC_OPENSSL=C:\Program Files\OpenSSL-Win64\bin" >> $env:GITHUB_ENV
-      - run: pip install -e ".[test,integration]"
+      - run: pip install -c constraints.txt setuptools
+      - run: pip install --no-build-isolation -c constraints.txt -e ".[test,integration]"
       - run: pqc doctor
       - run: pqc try
       - run: python -m pytest -q
@@ -57,7 +62,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: pgrep, for the test that counts the edge's worker processes
         run: apt-get update && apt-get install -y --no-install-recommends procps
-      - run: pip install -e ".[test,integration]" && pqc doctor && pqc try
+      - run: pip install -c constraints.txt setuptools
+      - run: pip install --no-build-isolation -c constraints.txt -e ".[test,integration]" && pqc doctor && pqc try
       - run: python -m coverage run -m pytest -q
       - run: |
           python -m coverage report --skip-covered --sort=cover
@@ -71,7 +77,8 @@ jobs:
           python-version: "3.13"
       - name: Known vulnerabilities in the runtime and optional dependencies
         run: |
-          pip install pip-audit==2.10.1
+          pip install -c constraints.txt pip-audit
+          pip-audit --strict --no-deps -r constraints.txt
           pip-audit .
           python -c 'import tomllib; from pathlib import Path; print("\n".join(tomllib.loads(Path("pyproject.toml").read_text())["project"]["optional-dependencies"]["kms"]))' > extras.txt
           pip-audit -r extras.txt

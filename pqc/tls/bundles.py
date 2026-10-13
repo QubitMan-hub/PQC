@@ -9,8 +9,8 @@ from ..pki import CA, CAError, general_names, write
 EDGE_UID = 10001
 SERVICES = {
     "nginx": {"image": "nginx:stable", "port": 80, "public": 443, "volume": None,
-              "use": "https://{host}/ with a client that verifies ML-DSA (OpenSSL 3.5+, `pqc tls connect`). Browsers cannot verify "
-                     "ML-DSA yet: for them use policy = \"transition\" with fallback_cert and fallback_key (an ECDSA or RSA certificate)"},
+              "use": "https://{host}/ with a client that verifies ML-DSA (OpenSSL 3.5+, `pqc tls connect`). For browser/public-CA "
+                     "clients use policy = \"transition\" with fallback_cert and fallback_key (a trusted classical certificate)"},
     "postgres": {"image": "postgres:17", "port": 5432, "public": 5433, "volume": "/var/lib/postgresql/data",
                  "env": {"POSTGRES_PASSWORD": "${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}"},
                  "use": "psql \"host={host} port=5433 sslmode=verify-full sslrootcert=pki/ca.crt sslnegotiation=direct\" "

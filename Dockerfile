@@ -6,10 +6,11 @@ FROM ${BASE}
 RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 RUN useradd --system --uid 10001 --home /srv pqc
 WORKDIR /app
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md constraints.txt ./
 COPY pqc ./pqc
 # pip is not needed at run time and carries its own vendored packages, so it leaves the image.
-RUN pip install --no-cache-dir . && pip uninstall -y pip && pqc doctor
+RUN pip install --no-cache-dir -c constraints.txt setuptools && \
+    pip install --no-cache-dir --no-build-isolation -c constraints.txt . && pip uninstall -y pip && pqc doctor
 USER pqc
 WORKDIR /srv
 EXPOSE 8443 9100

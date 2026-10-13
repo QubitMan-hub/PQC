@@ -20,7 +20,7 @@ log = logging.getLogger("pqc.tls")
 
 
 HINTS = {  # OpenSSL's words for the two ways a client without post-quantum support is refused
-    "no shared signature algorithms": " (the client cannot verify ML-DSA certificates, as browsers today: use policy transition with a "
+    "no shared signature algorithms": " (the client does not offer compatible ML-DSA signatures: use policy transition with a "
                                       "fallback certificate)",
     "no suitable key share": " (the client offers none of the key exchanges this policy allows: strict needs a post-quantum hybrid "
                              "such as X25519MLKEM768, cnsa2 needs ML-KEM-1024; update the client, or use policy transition)",

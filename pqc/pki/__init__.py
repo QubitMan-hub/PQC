@@ -299,7 +299,20 @@ class CA:
             return self._crl(days)
 
     def _crl(self, days):
-        b = x509.CertificateRevocationListBuilder().issuer_name(self.cert.subject).last_update(now()).next_update(now() + dt.timedelta(days=days))
+        counter = self.root / 'crl-number'
+        number = int(counter.read_text()) if counter.exists() else 0
+        previous = self.root / 'crl.pem'
+        if previous.exists():
+            try:
+                number = max(number, crl_number(x509.load_pem_x509_crl(previous.read_bytes())) or 0)
+            except ValueError:
+                if not counter.exists():
+                    raise CAError('cannot recover the CRL number: restore crl-number or a valid crl.pem') from None
+        number += 1
+        # Reserve before signing: a crash or failed signer can skip a number, never reuse one.
+        write(counter, str(number).encode())
+        b = (x509.CertificateRevocationListBuilder().issuer_name(self.cert.subject).last_update(now()).next_update(now() + dt.timedelta(days=days))
+             .add_extension(x509.CRLNumber(number), critical=False))
         for r in self.records():
             if r.status == "revoked":
                 rb = x509.RevokedCertificateBuilder().serial_number(int(r.serial, 16)).revocation_date(dt.datetime.fromisoformat(r.revoked_at))
@@ -402,6 +415,13 @@ def check_revocation(serial, crl_pem, ca_certs):
         raise CAError(f"certificate {serial:x} was revoked on {r.revocation_date_utc.date()}")
 
 
+def crl_number(crl):
+    try:
+        return crl.extensions.get_extension_for_class(x509.CRLNumber).value.crl_number
+    except x509.ExtensionNotFound:
+        return None
+
+
 def fetch_crl(url, dest, ca_certs, timeout=10):
     """Download the CRL published at `url` and keep it at `dest`. Only a CRL that the CA signed, that has not expired and that
     is not older than the copy already kept replaces it, so a forged, stale or replayed download changes nothing. True when
@@ -422,16 +442,26 @@ def fetch_crl(url, dest, ca_certs, timeout=10):
             raise CAError(f"{url} did not return a CRL") from None
     new = verify_crl(data, ca_certs)
     dest = Path(dest)
-    if dest.exists():
-        old = dest.read_bytes()
-        if old == data:
-            return False
-        try:
-            if x509.load_pem_x509_crl(old).last_update_utc > new.last_update_utc:
-                raise CAError(f"{url} served a CRL older than the one kept at {dest}; keeping the newer one")
-        except ValueError:
-            pass
-    write(dest, data)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    with locked(dest.parent, f'.{dest.name}.lock'):
+        if dest.exists():
+            old = dest.read_bytes()
+            if old == data:
+                return False
+            try:
+                old = x509.load_pem_x509_crl(old)
+            except ValueError:
+                old = None
+            if old is not None:
+                old_number, new_number = crl_number(old), crl_number(new)
+                replay = old.last_update_utc > new.last_update_utc
+                if old_number is not None:
+                    replay |= new_number is None or new_number <= old_number
+                elif old.last_update_utc == new.last_update_utc:
+                    replay |= not {r.serial_number for r in old} <= {r.serial_number for r in new}
+                if replay:
+                    raise CAError(f"{url} served an older or replayed CRL; keeping the newer one at {dest}")
+        write(dest, data)
     return True
 
 

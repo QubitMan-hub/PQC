@@ -5,7 +5,8 @@ Acxelin PQC, product 1: post-quantum TLS 1.3 + mTLS and its certificate authorit
 ## Commands
 
 ```
-pip install -e ".[test,integration]"
+pip install -c constraints.txt setuptools
+pip install --no-build-isolation -c constraints.txt -e ".[test,integration]" ruff
 python -m pytest -q          # must stay green
 ruff check .
 pqc doctor && pqc try
