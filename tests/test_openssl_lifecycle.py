@@ -8,7 +8,7 @@ from cryptography.exceptions import InvalidSignature
 
 from pqc import tls
 from pqc.pki import generate, key_pem, signers
-from pqc.tls.openssl import Connection, _names, _self_signed
+from pqc.tls.openssl import Connection, _names, _self_signed, _windows_libraries
 from tests.helpers import REASON
 
 
@@ -27,7 +27,7 @@ def connection():
         ctx.close()
 
 
-@pytest.mark.skipif(REASON, reason=REASON or '')
+@pytest.mark.skipif(bool(REASON), reason=REASON or '')
 @pytest.mark.parametrize('operation', [
     'conn.pending()', 'conn.version', 'conn.cipher', 'conn.group', 'conn.peer_certificate()',
     'conn.peer_chain()', 'conn.export("test", b"")', 'conn.recv()', 'conn.sendall(b"test")', 'conn.handshake()',
@@ -94,6 +94,39 @@ def test_windows_loader_prefers_the_configured_directory(tmp_path, monkeypatch):
         assert _names('ssl')[0] == str(pinned / 'libssl-3-x64.dll')
 
 
+def test_windows_loader_finds_the_standard_install_before_path(tmp_path, monkeypatch):
+    installed = tmp_path / 'OpenSSL-Win64' / 'bin'
+    installed.mkdir(parents=True)
+    (installed / 'libssl-3-x64.dll').touch()
+    (installed / 'libssl-4-x64.dll').touch()
+    monkeypatch.delenv('PQC_OPENSSL', raising=False)
+    monkeypatch.setenv('ProgramFiles', str(tmp_path))
+    monkeypatch.setenv('PATH', '')
+    with mock.patch('pqc.tls.openssl.platform.system', return_value='Windows'):
+        assert _names('ssl')[0] == str(installed / 'libssl-3-x64.dll')
+
+
+def test_windows_loader_uses_one_matching_library_pair(tmp_path, monkeypatch):
+    folder = tmp_path / 'openssl'
+    folder.mkdir()
+    for name in ('libssl-4-x64.dll', 'libssl-3-x64.dll', 'libcrypto-3-x64.dll'):
+        (folder / name).touch()
+    monkeypatch.setenv('PQC_OPENSSL', str(folder))
+    monkeypatch.setenv('ProgramFiles', '')
+    monkeypatch.setenv('PATH', '')
+    crypto, ssl = mock.Mock(), mock.Mock()
+    crypto.OpenSSL_version_num.return_value = 0x30500000
+    loaded = []
+    def load(name, *args, **kwargs):
+        loaded.append(Path(name).name)
+        return crypto if 'crypto' in name else ssl
+    from pathlib import Path
+    with mock.patch('pqc.tls.openssl.ctypes.CDLL', side_effect=load), \
+            mock.patch('pqc.tls.openssl.platform.system', return_value='Windows'):
+        assert _windows_libraries() == (crypto, ssl)
+    assert loaded == ['libcrypto-3-x64.dll', 'libssl-3-x64.dll']
+
+
 def test_exporter_uses_the_encoded_label_length(connection):
     with mock.patch.object(tls.lib(), 'SSL_export_keying_material', return_value=1) as export:
         connection.export('é', b'context')
@@ -121,7 +154,7 @@ def test_private_key_bio_allocation_failure_never_reaches_the_parser(connection,
                 connection.ctx._use_key(path, None)
 
 
-@pytest.mark.skipif(REASON, reason=REASON or '')
+@pytest.mark.skipif(bool(REASON), reason=REASON or '')
 @pytest.mark.parametrize('operation', ['sign', 'verify'])
 def test_signer_digest_allocation_failure_never_reaches_initialization(operation):
     lib = tls.lib()
@@ -136,7 +169,7 @@ def test_signer_digest_allocation_failure_never_reaches_initialization(operation
                 assert not signers.verify(signer.spki, b'data', b'signature')
 
 
-@pytest.mark.skipif(REASON, reason=REASON or '')
+@pytest.mark.skipif(bool(REASON), reason=REASON or '')
 def test_self_issued_rollover_chain_connects_to_the_original_root(tmp_path):
     from pqc.pki import CA
     from pqc.tls.server import Server
@@ -154,7 +187,7 @@ def test_self_issued_rollover_chain_connects_to_the_original_root(tmp_path):
         server.stop(1)
 
 
-@pytest.mark.skipif(REASON, reason=REASON or '')
+@pytest.mark.skipif(bool(REASON), reason=REASON or '')
 @pytest.mark.parametrize('operation', ['load', 'generate'])
 def test_signer_bio_allocation_failure_never_reaches_the_parser(operation):
     lib = tls.lib()
@@ -168,3 +201,4 @@ def test_signer_bio_allocation_failure_never_reaches_the_parser(operation):
             with mock.patch.object(lib, 'PEM_write_bio_PKCS8PrivateKey', side_effect=AssertionError('NULL BIO reached writer')):
                 with pytest.raises(signers.SignerError, match='allocat'):
                     signers.OpenSSLSigner.generate('ML-DSA-65')
+

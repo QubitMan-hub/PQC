@@ -34,6 +34,8 @@ def ca_passphrase(root, new=False):
         return ask("CA passphrase: ", f"set {CA_PASS_ENV}")
     instead = f"set {CA_PASS_ENV}, or pass --no-encrypt to leave the CA key unencrypted"
     p1, p2 = ask("New CA passphrase: ", instead), ask("Repeat: ", instead)
+    if not p1:
+        raise CAError('the passphrase cannot be empty; choose a passphrase to encrypt the CA key')
     if p1 != p2:
         raise CAError("the passphrases do not match")
     return p1
@@ -82,3 +84,4 @@ def tls_client_args(p):
 
 def policy(p):
     p.add_argument("--policy", choices=list(tls.POLICIES), default="strict", help="strict: post-quantum only (default); transition: also classical clients; cnsa2: ML-KEM-1024 and ML-DSA-87 only")
+

@@ -8,6 +8,38 @@ from .. import NAME, __version__, explain, serve_http, tls
 from ..pki import CA
 
 
+def cmd_start(a):
+    """A small interactive entry point; all actions use the existing commands."""
+    from . import parser
+    from .common import ca_passphrase
+    if not sys.stdin.isatty():
+        raise ValueError('open a terminal for pqc start; scripts can use pqc doctor, pqc try or pqc console')
+    print('Acxelin PQC - get started\n'
+          '  1. Check this installation\n'
+          '  2. Run the one-minute demo (nothing is saved)\n'
+          '  3. Open the local console\n'
+          '  Q. Quit')
+    while True:
+        choice = input('Choose 1, 2, 3 or Q: ').strip().lower()
+        if choice == 'q':
+            return 0
+        if choice in ('1', '2', '3'):
+            break
+        print('Choose 1, 2, 3 or Q.')
+    command = {'1': ['doctor'], '2': ['try'], '3': ['console', '--ca', a.ca]}[choice]
+    args = parser().parse_args(command)
+    if choice == '3' and not (Path(a.ca) / 'ca.crt').exists():
+        print(f'No certificate authority in {a.ca}. The console needs one to issue certificates.')
+        if input('Create an encrypted certificate authority here? [y/N]: ').strip().lower() not in ('y', 'yes'):
+            return 0
+        name = input('Certificate authority name [My Root]: ').strip() or 'My Root'
+        print('Choose a passphrase to protect its private key. Typing is hidden; keep it safe.')
+        args.passphrase = ca_passphrase(a.ca, new=True)
+        CA.init(a.ca, name, passphrase=args.passphrase)
+        print(f'Created {name}. The console runs on this computer only; Ctrl+C stops it.')
+    return args.func(args)
+
+
 def cmd_doctor(a):
     if getattr(a, 'json', False):
         from .. import checks
@@ -101,6 +133,10 @@ def cmd_try(a):
 
 
 def add(sub):
+    p = sub.add_parser('start', help='guided menu: check installation, run the demo or open the local console')
+    p.set_defaults(func=cmd_start)
+    p.add_argument('--ca', default='pki', help='CA folder for the console (default: pki)')
+
     p = sub.add_parser("doctor", help="check that this machine can run the CA and the TLS edge",
                        epilog="exit codes: 0 safe, 1 warnings (with --strict), 2 unsafe configuration, 3 broken installation")
     p.set_defaults(func=cmd_doctor)
@@ -113,3 +149,4 @@ def add(sub):
 
     p = sub.add_parser("try", help="a one-minute tour: the post-quantum edge in front of a web server, nothing to set up")
     p.set_defaults(func=cmd_try)
+

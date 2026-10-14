@@ -76,7 +76,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     if not a.cmd:
         ap.print_help()
-        print(f"\nNew here? `{NAME} try` runs a one-minute tour; `{NAME} doctor` checks this machine.")
+        print(f"\nNew here? `{NAME} start` opens a guided menu; `{NAME} try` runs a one-minute tour; `{NAME} doctor` checks this machine.")
         sys.exit(0)
     h = logging.StreamHandler()
     h.setFormatter(JSONFormatter() if a.log_json else logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
@@ -91,3 +91,7 @@ def main(argv=None):
         sys.exit(1)
     except KeyboardInterrupt:
         sys.exit(130)
+    except EOFError:
+        print('error: input ended; reopen a terminal to continue guided setup', file=sys.stderr)
+        sys.exit(1)
+

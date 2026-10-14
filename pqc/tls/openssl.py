@@ -106,23 +106,26 @@ EASIEST = ("Easiest: use the container image, which has it (docker run --rm ghcr
 
 
 def _names(stem):
-    """Library file names to try, newest first. PQC_OPENSSL points at a directory holding a specific build."""
+    """Prefer the supported OpenSSL 3 ABI. PQC_OPENSSL selects an installation before standard folders and PATH."""
     system = platform.system()
     folders = [os.environ["PQC_OPENSSL"]] if os.environ.get("PQC_OPENSSL") else []
     if system == "Windows":
+        program_files = os.environ.get('ProgramFiles')
+        if program_files and ctypes.sizeof(ctypes.c_void_p) == 8:
+            folders.append(os.path.join(program_files, 'OpenSSL-Win64', 'bin'))
         rx = re.compile(rf"^lib{stem}-(\d+)(?:-x64)?\.dll$", re.I)
         found = []
         for folder in folders + os.environ.get("PATH", "").split(os.pathsep):
             if os.path.isdir(folder):
                 matches = [(int(m.group(1)), os.path.join(folder, f)) for f in os.listdir(folder) if (m := rx.match(f))]
-                found.extend(f for _, f in sorted(matches, reverse=True))
+                found.extend(f for _, f in sorted(matches, key=lambda item: (item[0] != 3, -item[0])))
         return found
     name = f"lib{stem}.3.dylib" if system == "Darwin" else f"lib{stem}.so.3"
     return [os.path.join(f, name) for f in folders] + [name]
 
 
-def _load(stem):
-    names = _names(stem)
+def _load(stem, names=None):
+    names = _names(stem) if names is None else names
     for n in names:
         try:
             return ctypes.CDLL(n, mode=getattr(ctypes, "RTLD_GLOBAL", 0))
@@ -132,9 +135,27 @@ def _load(stem):
                              "Or install OpenSSL 3.5+ and set PQC_OPENSSL to the folder that holds it.")
 
 
+def _windows_libraries():
+    """Use SSL and crypto DLLs of the same major version from the same directory."""
+    for ssl_name in _names('ssl'):
+        crypto_name = str(Path(ssl_name).with_name(re.sub('^libssl', 'libcrypto', Path(ssl_name).name, flags=re.I)))
+        if not Path(crypto_name).is_file():
+            continue
+        try:
+            crypto = _load('crypto', [crypto_name])
+            crypto.OpenSSL_version_num.restype = ctypes.c_ulong
+            if crypto.OpenSSL_version_num() < MIN_VERSION:
+                continue
+            return crypto, _load('ssl', [ssl_name])
+        except OpenSSLUnavailable:
+            continue
+    raise OpenSSLUnavailable('No matching OpenSSL 3.5+ SSL and crypto DLLs were found. '
+                             'Install 64-bit OpenSSL 3.5+ and set PQC_OPENSSL to its bin folder, then run pqc doctor.')
+
+
 class _Lib:
     def __init__(self):
-        crypto = _load("crypto")
+        crypto, ssl = _windows_libraries() if platform.system() == 'Windows' else (_load('crypto'), None)
         crypto.OpenSSL_version.argtypes, crypto.OpenSSL_version.restype = [I], S
         crypto.OpenSSL_version_num.restype = ctypes.c_ulong
         self.version = crypto.OpenSSL_version(0).decode()
@@ -143,7 +164,8 @@ class _Lib:
                     "(PQC_OPENSSL cannot help here: this process has already loaded the system OpenSSL).") if platform.system() == "Linux" else \
                    " Or install OpenSSL 3.5+ and set PQC_OPENSSL to the folder that holds it."
             raise OpenSSLUnavailable(f"this machine's {self.version} is too old: post-quantum TLS needs OpenSSL 3.5 or newer. {EASIEST}{hint}")
-        ssl = _load("ssl")
+        if ssl is None:
+            ssl = _load("ssl")
         for lib_, table in ((crypto, PROTOTYPES["crypto"]), (ssl, PROTOTYPES["ssl"])):
             held = ctypes.PyDLL(lib_._name, handle=lib_._handle)
             for name, args, res in table:
@@ -490,3 +512,4 @@ class Connection:
 
     def __exit__(self, *exc):
         self.close()
+
