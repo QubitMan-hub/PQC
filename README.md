@@ -1,5 +1,9 @@
 # Acxelin PQC: TLS 1.3 + mTLS
 
+[**Visit the website**](https://qubitman-hub.github.io/PQC/) · [Step-by-step guide](https://qubitman-hub.github.io/PQC/manual.html) · [How it works](https://qubitman-hub.github.io/PQC/how-it-works/tls.html)
+
+The website contains the product information and documentation. The working console runs on your own machine with `pqc console`; it is not hosted on GitHub Pages. Website publishing setup is in [CONTRIBUTING.md](CONTRIBUTING.md#website).
+
 Puts quantum-safe encryption in front of the services you already run, without changing them.
 
 - **Quantum-safe connections:** TLS 1.3 with post-quantum key exchange (X25519MLKEM768) and certificates (ML-DSA).
@@ -19,7 +23,7 @@ You will see a web page fetched over a quantum-safe connection, and an old-style
 
 ## Install
 
-You need Python 3.11+ and OpenSSL 3.5+ ([how to get OpenSSL 3.5](site/manual.html#install) on Windows and macOS; recent Linux already has it).
+You need Python 3.11+ and OpenSSL 3.5+ ([how to get OpenSSL 3.5](https://qubitman-hub.github.io/PQC/manual.html#install) on Windows and macOS; recent Linux already has it).
 
 ```
 git clone https://github.com/QubitMan-hub/PQC
@@ -51,8 +55,8 @@ Opens a page in your browser where you issue, download, renew and revoke certifi
 
 ## Learn more
 
-- **Step-by-step guide:** [site/manual.html](site/manual.html) (open it in a browser). Every step shows what you should see.
-- **How it works:** [site/how-it-works/tls.html](site/how-it-works/tls.html), an interactive diagram.
+- **Step-by-step guide:** [Read the guide](https://qubitman-hub.github.io/PQC/manual.html). Every step shows what you should see.
+- **How it works:** [Open the interactive diagram](https://qubitman-hub.github.io/PQC/how-it-works/tls.html).
 - **Every option:** `pqc --help`, then `pqc COMMAND --help`.
 - **Every edge setting:** [examples/edge.toml](examples/edge.toml).
 - **Deploying:** `Dockerfile`, `deploy/helm/pqc` (Kubernetes) and `deploy/systemd`.

@@ -50,4 +50,33 @@ The TLS tests run when OpenSSL 3.5+ is available and are skipped otherwise; `pqc
 
 `site/index.html` is the product page; `site/how-it-works/tls.html` is the interactive diagram, built with the archify skill in `.claude/skills/archify` from `docs/how-it-works/tls.workflow.json`.
 
+The public website is published at **https://qubitman-hub.github.io/PQC/** by
+`.github/workflows/pages.yml`. The workflow uploads only `site/`, preserving the
+existing relative links, fonts, images and diagram. No build or backend is needed.
+Pull requests check and package the site without deploying it; changes to `site/`
+or the workflow on `main` publish automatically. **Run workflow** on `main` also
+publishes manually.
+
+Repository owner setup (after merging the workflow):
+
+1. In **Settings → Pages → Build and deployment**, set **Source** to **GitHub Actions**.
+2. Allow GitHub Actions and the pinned `actions/*` actions in repository settings.
+   If the `github-pages` environment has deployment rules, permit `main` and approve
+   any required deployment review.
+3. In **Actions → Deploy website → Run workflow**, select `main`. Check that the
+   deployment succeeds and that the website, guide and diagram open.
+4. On the repository's **About** panel, click the gear and set **Website** to
+   `https://qubitman-hub.github.io/PQC/` (or select **Use your GitHub Pages website**).
+
+No personal access token, hosting credentials or custom secrets are required:
+deployment uses GitHub's automatic `GITHUB_TOKEN` and OIDC token. Before the first
+successful deployment, the website links may return 404.
+
+GitHub Pages hosts static documentation only. `pqc console` needs a running Python
+backend, OpenSSL 3.5+, CA files and its bearer token. Remote console access needs
+a separately managed server and a TLS edge with a browser-trusted certificate,
+as described in the guide. Do not upload CA private keys, console tokens or the
+console backend to the Pages artifact. The Docker, Helm and systemd files deploy
+the PQC services separately; GitHub Pages does not run them.
+
 `pqc` is a working name: `NAME` in `pqc/__init__.py`.
