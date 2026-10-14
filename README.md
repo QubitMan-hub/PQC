@@ -23,16 +23,51 @@ You will see a web page fetched over a quantum-safe connection, and an old-style
 
 ## Install
 
+### Windows Command Prompt
+
+Install Python 3.11+ (enable **Add Python to PATH**) and 64-bit OpenSSL 3.5+.
+Open Command Prompt and run each line separately:
+
+```bat
+git clone https://github.com/QubitMan-hub/PQC
+cd PQC
+setup.cmd
+pqc.cmd
+```
+
+`setup.cmd` installs into a private `.venv` in this folder. `pqc.cmd` opens a menu:
+check the installation, run the demo, or open the local console. If you do not
+have a CA yet, the menu offers to create one with an encrypted private key and
+asks for its name and passphrase. Keep that passphrase safe; typing is hidden.
+Existing CA files are preserved.
+
+You can also run `pqc.cmd doctor`, `pqc.cmd try`, `pqc.cmd console`, or any of the
+commands below using `pqc.cmd` in place of `pqc`. This avoids the **pqc is not
+recognized** error and needs no environment activation. In PowerShell, use
+`.\setup.cmd` and `.\pqc.cmd` instead. Run from your PQC folder; when a command
+needs another terminal, open it in the same folder.
+
+The standard `C:\Program Files\OpenSSL-Win64\bin` installation is detected
+automatically. For a different OpenSSL folder, in Command Prompt run
+`set "PQC_OPENSSL=C:\path\to\OpenSSL\bin"`; in PowerShell run
+`$env:PQC_OPENSSL = "C:\path\to\OpenSSL\bin"`. Set this in each new terminal.
+Keep the console terminal open while using the browser; Ctrl+C stops it.
+
+### Other installations
+
 You need Python 3.11+ and OpenSSL 3.5+ ([how to get OpenSSL 3.5](https://qubitman-hub.github.io/PQC/manual.html#install) on Windows and macOS; recent Linux already has it).
 
 ```
 git clone https://github.com/QubitMan-hub/PQC
 cd PQC
-pip install .
-pqc doctor
+python -m pip install .
+python -m pqc doctor
 ```
 
 `pqc doctor` should say `TLS edge: ready`.
+
+If `pqc` is not on your PATH, use `python -m pqc` with the Python that you installed
+it into. For an interactive start, run `python -m pqc start`.
 
 ## Use it
 
@@ -71,3 +106,4 @@ Opens a page in your browser where you issue, download, renew and revoke certifi
 - Not FIPS 140-3 validated, and not yet independently security reviewed.
 
 Working on the code: [CONTRIBUTING.md](CONTRIBUTING.md). Security: [SECURITY.md](SECURITY.md).
+

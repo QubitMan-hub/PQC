@@ -50,7 +50,8 @@ class CrashTest(unittest.TestCase):
         root = self.d / "pki"
         CA.init(root, "Root")
         for round_ in range(8):
-            killed([CA_WORK, str(root)], self.rnd)
+            before = len(CA(root).records())
+            killed([CA_WORK, str(root)], self.rnd, ready=lambda: len(CA(root).records()) >= before + 2)
             with self.subTest(round=round_):
                 ca = CA(root)
                 known = {r.serial for r in ca.records()}
@@ -67,3 +68,4 @@ class CrashTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

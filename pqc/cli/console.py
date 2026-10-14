@@ -15,8 +15,9 @@ def cmd_console(a):
     s.edges += a.edge
     s.check_updates = s.check_updates or a.check_updates
     if not (Path(s.ca) / "ca.crt").exists():
-        raise ValueError(f"no CA in {s.ca}; create one with 'pqc ca init --dir {s.ca}', or point --ca at yours")
-    pw = ca_passphrase(s.ca)
+        raise ValueError(f'no CA in {s.ca}; run pqc start for guided setup, or create one with '
+                         f'\'pqc ca init --name "My Root" --dir "{s.ca}"\', or point --ca at yours')
+    pw = getattr(a, 'passphrase', None) or ca_passphrase(s.ca)
     CA(s.ca, pw)
     app = App(s, passphrase=pw)
     httpd = serve(app)
@@ -43,3 +44,4 @@ def add(sub):
     p.add_argument("--edge", action="append", default=[], help="an edge's --metrics address, e.g. http://127.0.0.1:9100 (repeatable)")
     p.add_argument("--check-updates", action="store_true", help="show when a newer release is out (asks GitHub once a day)")
     p.add_argument("--no-browser", action="store_true", help="do not open the page in a browser")
+

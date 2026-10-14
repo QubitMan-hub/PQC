@@ -64,16 +64,24 @@
       </div>
       <table class="plain">
         <tr><th>Your computer</th><th>Get OpenSSL 3.5</th></tr>
-        <tr><td>Windows</td><td>Install the 64-bit OpenSSL 3.5 (or newer) build for Windows. Then, in PowerShell: <code>$env:PQC_OPENSSL = "C:\Program Files\OpenSSL-Win64\bin"</code> (the folder that holds <code>libssl-3-x64.dll</code>).</td></tr>
+        <tr><td>Windows</td><td>Install Python 3.11+ with <b>Add Python to PATH</b> enabled, and 64-bit OpenSSL 3.5 or newer. The standard <code>C:\Program Files\OpenSSL-Win64\bin</code> folder is detected automatically. For a different folder, in Command Prompt use <code>set "PQC_OPENSSL=C:\path\to\OpenSSL\bin"</code>; in PowerShell use <code>$env:PQC_OPENSSL = "C:\path\to\OpenSSL\bin"</code>. The folder must contain matching SSL and crypto DLLs.</td></tr>
         <tr><td>macOS</td><td><code>brew install openssl@3</code>, then <code>export PQC_OPENSSL="$(brew --prefix openssl@3)/lib"</code></td></tr>
         <tr><td>Debian 13, Ubuntu 25.04+</td><td>Nothing to do: it is the system OpenSSL.</td></tr>
         <tr><td>Anything with Docker</td><td>Skip all of this: <code>docker build -t pqc https://github.com/QubitMan-hub/PQC.git#main</code>, then <code>docker run --rm pqc</code> runs the tour.</td></tr>
       </table>
-      <p>Then get the code and install it:</p>
+      <p>On Windows, open Command Prompt and run each line separately:</p>
       <pre>git clone https://github.com/QubitMan-hub/PQC
 cd PQC
-pip install .
-pqc doctor</pre>
+setup.cmd
+pqc.cmd</pre>
+      <p class="fine">The menu checks the installation, runs the demo, or opens the local console. It offers to create an encrypted CA if you need one. Keep its passphrase safe; typing is hidden. Existing CA files are preserved. In PowerShell use <code>.\setup.cmd</code> and <code>.\pqc.cmd</code>. No environment activation is needed.</p>
+      <p class="fine">For every command below, Windows customers can use <code>pqc.cmd</code> in place of <code>pqc</code>, or <code>.\pqc.cmd</code> in PowerShell. Keep the terminal in this folder. Keep the console terminal open while using the browser; Ctrl+C stops it.</p>
+      <p>For other installations, get the code and install it with your chosen Python:</p>
+      <pre>git clone https://github.com/QubitMan-hub/PQC
+cd PQC
+python -m pip install .
+python -m pqc doctor</pre>
+      <p class="fine">If <code>pqc</code> is not recognized, use <code>python -m pqc</code>. <code>python -m pqc start</code> opens the guided menu.</p>
       <p class="fine"><b>You should see</b> <code>TLS edge: ready</code>. If it says OpenSSL was not found or is too old, the message names the next step; fix that before going on.</p>
     </div>
   </section>
@@ -233,3 +241,4 @@ pqc ca revoke SERIAL --reason keyCompromise</pre>
 <script src="site.js" defer></script>
 </body>
 </html>
+
